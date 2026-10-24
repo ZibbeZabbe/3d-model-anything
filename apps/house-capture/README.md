@@ -76,7 +76,7 @@ first area). Photo `transform` is camera-to-world (camera looks down −Z); JPEG
 landscape sensor image and `intrinsics` (fx, fy, cx, cy) match them — ignore EXIF when projecting.
 RoomPlan surface/object `transform`s are centered on the element; `dimensions` = width × height × depth.
 
-`diagnostics.json` is checkpointed every five seconds during capture, including an unfinished room.
+`diagnostics.json` is checkpointed every five seconds during capture, including for an unfinished room.
 Deleting a session (including leaving a capture without saving) or a whole house first copies each
 session's diagnostics to `Documents/Diagnostics/`, visible in the Files app, so the evidence of a
 failed capture outlives it. Depth frames that cannot be written are left out of `depth/frames.json`
