@@ -29,3 +29,4 @@ apps/house-capture/muter-report.html
 apps/house-capture_mutated/
 .coverage
 apps/house-capture/build-device/
+apps/house-capture/Signing.local.xcconfig
