@@ -14,8 +14,59 @@ jobs:
       - run: python3 tools/audit-public.py
       - run: npm ci
       - run: npm run build
-      - uses: actions/setup-python@v5
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:coverage
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # Python 3.12 and every dependency come from pyproject.toml / uv.lock.
+      - run: uv sync --locked
+      - run: uv run pytest --cov --cov-report=term
+
+  visual:
+    runs-on: ubuntu-latest
+    # The baselines in tests/visual/__screenshots__ come from this image (tools/visual-tests.sh).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
         with:
-          python-version: '3.12'
-      - run: pip install Pillow
-      - run: python3 .agents/skills/scan-to-threejs/scripts/test_house_import.py
+          name: visual-diff
+          path: test-results/
+
+  ios:
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: apps/house-capture
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = [d for runtime, ds in json.load(sys.stdin)["devices"].items() if "iOS" in runtime for d in ds]
+          print(next(d["udid"] for d in devices if d["name"].startswith("iPhone")))')
+          echo "SIMULATOR=$UDID" >> "$GITHUB_ENV"
+      - name: Unit tests with coverage
+        run: |
+          xcodebuild test -project HouseCapture.xcodeproj -scheme HouseCapture \
+            -destination "id=$SIMULATOR" -derivedDataPath build -resultBundlePath build/tests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+          xcrun xccov view --report --only-targets build/tests.xcresult
+      - name: App self-test (house files, deletion, export, coverage engine)
+        run: |
+          xcrun simctl boot "$SIMULATOR" || true
+          xcrun simctl install "$SIMULATOR" build/Build/Products/Debug-iphonesimulator/HouseCapture.app
+          xcrun simctl launch --console-pty --terminate-running-process "$SIMULATOR" com.wesbos.housecapture -selftest | tee selftest.log
+          grep -q "SELFTEST: PASS" selftest.log
