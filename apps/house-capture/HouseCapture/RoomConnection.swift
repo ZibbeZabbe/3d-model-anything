@@ -30,9 +30,9 @@ enum RoomJSON {
   static func floats(_ value: Any?) -> [Float]? { (value as? [NSNumber])?.map(\.floatValue) }
   /// Wall centre lines on the floor plane (x, z)
   static func wallSegments(_ json: [String: Any]) -> [(SIMD2<Float>, SIMD2<Float>)] {
-    (json["walls"] as? [[String: Any]] ?? []).compactMap { w in
-      guard let t = floats(w["transform"]), t.count == 16, let width = floats(w["dimensions"])?.first else { return nil }
-      let center = SIMD2(t[12], t[14]), half = SIMD2(t[0], t[2]) * width / 2
+    RoomFootprint.Wall.parse(json).map { w in
+      let center = SIMD2(w.transform.columns.3.x, w.transform.columns.3.z)
+      let half = SIMD2(w.transform.columns.0.x, w.transform.columns.0.z) * w.width / 2
       return (center-half, center+half)
     }
   }
