@@ -1,0 +1,32 @@
+[project]
+name = "scan-to-threejs-scripts"
+version = "0.0.0"
+description = "Python helpers of the scan-to-threejs skill (conversion, photos, reconstruction)."
+# Open3D publishes wheels up to Python 3.12; newer interpreters cannot install it.
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "numpy>=2.0",
+  "open3d>=0.19",
+  "pillow>=11.0",
+]
+
+[dependency-groups]
+dev = [
+  "jsonschema>=4.23",
+  "mutmut>=3.2",
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = [".agents/skills/scan-to-threejs/scripts"]
+python_files = ["test_*.py"]
+addopts = "-p no:dash"
+norecursedirs = ["mutants", ".*", "node_modules"]
+
+[tool.coverage.run]
+source = [".agents/skills/scan-to-threejs/scripts"]
+omit = ["*/test_*.py"]
