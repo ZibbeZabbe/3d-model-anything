@@ -1,0 +1,19 @@
+# Swift mutation testing: `npm run test:swift:mutation` from the repository root.
+# Each mutant rebuilds and reruns the unit tests in the simulator (about a minute each), so the
+# npm script targets the files covered by HouseCaptureTests; widen it as tests are added.
+executable: /usr/bin/xcodebuild
+arguments:
+  - test
+  - -project
+  - HouseCapture.xcodeproj
+  - -scheme
+  - HouseCapture
+  - -destination
+  - platform=iOS Simulator,name=iPhone 17 Pro
+  - -only-testing:HouseCaptureTests
+  - -derivedDataPath
+  - build-muter
+exclude:
+  - HouseCaptureTests
+  - build
+  - build-muter

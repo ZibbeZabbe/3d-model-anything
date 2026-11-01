@@ -7,7 +7,18 @@
     "dev": "vite --config apps/room-viewer/vite.config.ts",
     "build": "tsc && vite build --config apps/room-viewer/vite.config.ts",
     "preview": "vite preview --config apps/room-viewer/vite.config.ts",
-    "textures": "python3 .agents/skills/scan-to-threejs/scripts/fetch_textures.py"
+    "textures": "python3 .agents/skills/scan-to-threejs/scripts/fetch_textures.py",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:mutation": "stryker run",
+    "test:python": "uv run pytest",
+    "test:python:coverage": "uv run pytest --cov --cov-report=term --cov-report=html:coverage/python",
+    "test:python:mutation": "cd .agents/skills/scan-to-threejs/scripts && uv run mutmut run --max-children 8 && uv run mutmut results",
+    "test:swift": "cd apps/house-capture && xcodegen generate && rm -rf build/tests.xcresult && xcodebuild test -project HouseCapture.xcodeproj -scheme HouseCapture -destination \"platform=iOS Simulator,name=iPhone 17 Pro\" -derivedDataPath build -resultBundlePath build/tests.xcresult",
+    "test:swift:coverage": "xcrun xccov view --report --only-targets apps/house-capture/build/tests.xcresult",
+    "test:swift:mutation": "cd apps/house-capture && muter run --skip-update-check --format html --output muter-report.html --files-to-mutate HouseCapture/DiagnosticsArchive.swift --files-to-mutate HouseCapture/DepthFrameStore.swift --files-to-mutate HouseCapture/ConnectionCheck.swift",
+    "test:visual": "tools/visual-tests.sh",
+    "test:visual:update": "tools/visual-tests.sh --update-snapshots"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
@@ -15,10 +26,15 @@
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.5.0",
+    "@playwright/test": "^1.64.1",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/three": "^0.186.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "gl-matrix": "^3.4.4",
     "pngjs": "^7.0.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.5"
   }
 }

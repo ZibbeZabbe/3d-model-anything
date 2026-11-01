@@ -15,3 +15,17 @@ data/scans/
 apps/house-capture/release/screenshots/
 
 HouseCapture.xcodeproj/
+.venv/
+mutants/
+reports/
+coverage/
+.stryker-tmp/
+test-results/
+playwright-report/
+.agents/skills/scan-to-threejs/scripts/mutants/
+apps/house-capture/build-muter/
+apps/house-capture/muter_logs/
+apps/house-capture/muter-report.html
+apps/house-capture_mutated/
+.coverage
+apps/house-capture/build-device/
