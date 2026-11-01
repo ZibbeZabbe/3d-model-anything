@@ -115,6 +115,16 @@ class WorldToRoomTests(unittest.TestCase):
         assert_close(self, center, [0, -3])
 
 
+    def test_center_depends_on_how_far_each_wall_reaches(self):
+        # An L of walls: x from -2 to 10, z from -1 to 3.
+        walls = [wall('long', 0, 0, 0, 4), wall('far', 10, 1, math.pi / 2, 4)]
+        _, center = b2r.world_to_room(walls, 0.0, 0.0)
+        assert_close(self, center, [4, 1])
+
+    def test_frame_keeps_an_affine_last_row(self):
+        w2r, _ = b2r.world_to_room(self.walls, 0.5, 0.2)
+        self.assertEqual(w2r[3], [0, 0, 0, 1])
+
 class FloorPolygonTests(unittest.TestCase):
     def floor(self, corners, transform=None):
         return {'floors': [{'transform': transform or pose(0, 0, 0, 0), 'polygonCorners': corners}]}
@@ -142,6 +152,20 @@ class FloorPolygonTests(unittest.TestCase):
         self.assertEqual(b2r.floor_polygon(room, IDENTITY), SQUARE_CCW)
 
 
+    def test_roomplan_floor_corners_lie_in_its_local_x_y_plane(self):
+        # RoomPlan turns the floor -90 degrees about x: local +y points along world -z.
+        lying = [1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1]
+        room = self.floor([[0, 0, 0], [1, 0, 0], [1, 1, 0]], lying)
+        self.assertEqual(b2r.floor_polygon(room, IDENTITY), [[0, 0], [1, 0], [1, -1]])
+
+    def test_corner_depths_are_rounded_to_a_tenth_of_a_millimetre(self):
+        room = self.floor([[0, 0, -0.123456], [1, 0, 0], [1, 0, -1]])
+        self.assertEqual(b2r.floor_polygon(room, IDENTITY)[0], [0, -0.1235])
+
+    def test_flat_outline_keeps_its_order(self):
+        room = self.floor([[0, 0, 0], [1, 0, 0], [2, 0, 0]])
+        self.assertEqual(b2r.floor_polygon(room, IDENTITY), [[0, 0], [1, 0], [2, 0]])
+
 class PolygonTests(unittest.TestCase):
     def test_signed_area_is_twice_the_area_counter_clockwise(self):
         self.assertEqual(b2r.signed_area(SQUARE_CCW), 2)
@@ -154,7 +178,20 @@ class PolygonTests(unittest.TestCase):
 
     def test_point_beyond_any_edge_is_outside(self):
         for x, z in [(1.5, -0.5), (-0.5, -0.5), (0.5, 0.5), (0.5, -1.5)]:
-            self.assertFalse(b2r.inside(SQUARE_CCW, x, z), (x, z))
+            self.assertIs(b2r.inside(SQUARE_CCW, x, z), False, (x, z))
+
+    def test_slanted_edges_bound_the_inside(self):
+        triangle = [[0, -1], [2, -1], [0, -3]]  # hypotenuse x - z = 3
+        self.assertTrue(b2r.inside(triangle, 0.9, -1.9))
+        self.assertFalse(b2r.inside(triangle, 1.1, -2.1))
+
+    def test_low_x_and_low_z_edges_count_as_inside(self):
+        self.assertTrue(b2r.inside(SQUARE_CCW, 0, -0.5))
+        self.assertTrue(b2r.inside(SQUARE_CCW, 0.5, -1))
+
+    def test_high_x_and_high_z_edges_count_as_outside(self):
+        self.assertFalse(b2r.inside(SQUARE_CCW, 1, -0.5))
+        self.assertFalse(b2r.inside(SQUARE_CCW, 0.5, 0))
 
     def test_notch_of_a_concave_polygon_is_outside(self):
         ell = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]
@@ -201,8 +238,14 @@ class OpeningTests(unittest.TestCase):
         self.assertIs(type(o['v0']), float)
 
     def test_bottom_at_the_sill_threshold_is_kept(self):
-        o = b2r.convert_opening('opening', self.element(0, 1.06, 1, 2, {}), IDENTITY, [0, 0, 0], [1, 0, 0])
+        # Centre 0.12 and height 0.12 put the bottom at exactly 0.06 in binary floats.
+        o = b2r.convert_opening('opening', self.element(0, 0.12, 1, 0.12, {}), IDENTITY, [0, 0, 0], [1, 0, 0])
         self.assertEqual(o['v0'], 0.06)
+
+    def test_extents_follow_a_slanted_wall(self):
+        element = {'transform': pose(1 + 0.6 * 2, 1, 2 + 0.8 * 2, 0), 'dimensions': [1, 1, 0], 'category': {}}
+        o = b2r.convert_opening('window', element, IDENTITY, [1, 0, 2], [0.6, 0, 0.8])
+        self.assertEqual((o['u0'], o['u1']), (1.5, 2.5))
 
     def test_door_reports_whether_it_is_open(self):
         for category, expected in [({'door': {'isOpen': True}}, True), ({'door': {'isOpen': 0}}, False),
@@ -259,6 +302,25 @@ class WallTests(unittest.TestCase):
         self.assertEqual([o['u0'] for o in w['openings']], [0.75, 2.75])
 
 
+    def test_openings_keep_their_kind(self):
+        kids = {'w': [('window', {'transform': pose(2, 1, -2, 0), 'dimensions': [1, 1, 0], 'category': {}})]}
+        w = b2r.convert_wall(0, wall('w', 2, -2, 0, 4), IDENTITY, self.POLY, kids)
+        self.assertEqual(w['openings'][0]['kind'], 'window')
+
+    def test_wall_along_z_facing_away_is_turned_towards_the_room(self):
+        # West wall on x = 0 with u along +z: u x up points to -x, out of the room.
+        w = b2r.convert_wall(0, wall('w', 0, -1, math.pi / 2, 2), IDENTITY, self.POLY, {})
+        self.assertEqual((w['u'], w['n'], w['a']), ([0, 0, -1], [1, 0, 0], [0, 0]))
+
+    def test_wall_along_z_facing_the_room_keeps_its_direction(self):
+        # Same wall with u along -z: u x up already points to +x.
+        w = b2r.convert_wall(0, wall('w', 0, -1, -math.pi / 2, 2), IDENTITY, self.POLY, {})
+        self.assertEqual((w['u'], w['n']), ([0, 0, -1], [1, 0, 0]))
+
+    def test_wall_just_inside_the_outline_is_probed_on_its_inner_side(self):
+        w = b2r.convert_wall(0, wall('w', 0.03, -1, math.pi / 2, 2), IDENTITY, self.POLY, {})
+        self.assertEqual(w['n'], [1, 0, 0])
+
 class ObjectTests(unittest.TestCase):
     def test_object_center_and_size_are_in_room_coords_to_the_millimetre(self):
         o = b2r.convert_object(box(1.23456, 0.5, 2, size=(1.23456, 0.5, 2)), translation(-1, 0, 0))
@@ -273,6 +335,10 @@ class ObjectTests(unittest.TestCase):
         o = b2r.convert_object(box(5, 0, 5), translation(1, 1, 1))
         self.assertEqual((o['rotY'], o['front']), (0, [0, 1]))
 
+
+    def test_turn_and_front_are_rounded(self):
+        o = b2r.convert_object(box(0, 0, 0, yaw=-0.123456), IDENTITY)
+        self.assertEqual((o['rotY'], o['front']), (0.1235, [round(math.sin(0.123456), 3), round(math.cos(0.123456), 3)]))
 
 class PhotoTests(unittest.TestCase):
     def photo(self, room=0, blur=None, yaw=0.0, x=0.0):
@@ -315,6 +381,15 @@ class PhotoTests(unittest.TestCase):
 
     def test_aspect_is_height_over_width(self):
         self.assertEqual(b2r.convert_photo(self.photo(), IDENTITY)['aspect'], 0.75)
+
+    def test_aspect_is_rounded_to_five_digits(self):
+        p = self.photo()
+        p['width'], p['height'] = 3000, 1000
+        self.assertEqual(b2r.convert_photo(p, IDENTITY)['aspect'], 0.33333)
+
+    def test_forward_is_rounded_to_five_digits(self):
+        p = b2r.convert_photo(self.photo(yaw=0.1), IDENTITY)
+        self.assertEqual(p['forward'], [round(math.sin(0.1), 5), 0, round(-math.cos(0.1), 5)])
 
     def test_blur_is_passed_through_when_measured(self):
         self.assertEqual(b2r.convert_photo(self.photo(blur=1.5), IDENTITY)['blurPixels'], 1.5)
@@ -366,6 +441,14 @@ class ConvertRoomTests(unittest.TestCase):
         self.assertEqual(b2r.convert_room(room, [], 'src')['objects'], [])
 
 
+    def test_floor_outline_is_reported_and_turns_walls_inwards(self):
+        room = self.room()
+        room['floors'] = [{'transform': pose(2, 0.1, 1, 0),
+                           'polygonCorners': [[-2, 0, 1], [2, 0, 1], [2, 0, -1], [-2, 0, -1]]}]
+        r = b2r.convert_room(room, [], 'src')
+        self.assertEqual(r['polygon'], [[-2, 1], [2, 1], [2, -1], [-2, -1]])
+        assert_close(self, r['walls'][1]['n'], [0, 0, -1])
+
 class SourceNameTests(unittest.TestCase):
     def test_bundle_folder_names_the_whole_structure(self):
         self.assertEqual(b2r.source_name('captures/kitchen/', None), 'kitchen')
@@ -381,21 +464,23 @@ class SummaryTests(unittest.TestCase):
         return {'walls': [
             {'index': 0, 'a': [-2, -1], 'b': [2, -1], 'length': 4, 'height': 2.5, 'n': [0, 0, 1], 'openings': [door, window]},
             {'index': 11, 'a': [2, 1.5], 'b': [-2, 1.5], 'length': 4, 'height': 2.1, 'n': [0, 0, -1], 'openings': []},
+            {'index': 12, 'a': [-2, 3.5], 'b': [-2, -3], 'length': 6.5, 'height': 2.5, 'n': [1, 0, 0], 'openings': []},
         ], 'objects': [{'category': 'sofa', 'center': [0.5, 0.4, -0.25], 'size': [2, 1, 1], 'rotY': math.pi / 2}],
             'photos': [{}, {}, {}]}
 
     def test_first_line_gives_extent_heights_counts_and_output(self):
         self.assertEqual(b2r.summary(self.result(), 'out.json')[0],
-                         'room 4.00 × 2.50 m, heights [2.1, 2.5], 2 walls, 1 objects, 3 photos → out.json')
+                         'room 4.00 × 6.50 m, heights [2.1, 2.5], 3 walls, 1 objects, 3 photos → out.json')
 
     def test_one_line_per_wall_lists_its_openings(self):
         lines = b2r.summary(self.result(), 'o')
         self.assertEqual(lines[1], '  wall  0: ( -2.00, -1.00) → (  2.00, -1.00)  len 4.00 h 2.50  n (0,1)  '
                                    'door u0.50-1.25 v0.00-2.00, window u2.00-3.00 v1.00-2.00')
         self.assertEqual(lines[2], '  wall 11: (  2.00,  1.50) → ( -2.00,  1.50)  len 4.00 h 2.10  n (0,-1)  ')
+        self.assertEqual(lines[3], '  wall 12: ( -2.00,  3.50) → ( -2.00, -3.00)  len 6.50 h 2.50  n (1,0)  ')
 
     def test_one_line_per_object_gives_its_turn_in_degrees(self):
-        self.assertEqual(b2r.summary(self.result(), 'o')[3],
+        self.assertEqual(b2r.summary(self.result(), 'o')[4],
                          '  sofa         center (0.50,-0.25) size [2, 1, 1] rotY 90°')
 
 
@@ -480,6 +565,29 @@ class MainTests(unittest.TestCase):
                 b2r.main()
             self.assertTrue(plan.is_file())
         self.assertEqual(printed.getvalue().splitlines()[-1], str(plan))
+
+
+    def run_main(self, temp, *args):
+        import synthetic_bundle
+        bundle = synthetic_bundle.write_bundle(Path(temp) / 'b', structure=synthetic_bundle.room_plan(),
+                                               with_photos=False)
+        out = Path(temp) / 'r.json'
+        with mock.patch.object(sys, 'argv', ['bundle_to_room.py', str(bundle), '-o', str(out), *args]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            b2r.main()
+        return out.read_text()
+
+    def test_main_writes_one_space_indented_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            text = self.run_main(temp)
+        self.assertEqual(text, json.dumps(json.loads(text), indent=1))
+
+    def test_main_passes_the_quarter_turns(self):
+        with tempfile.TemporaryDirectory() as temp:
+            straight = json.loads(self.run_main(temp))
+        with tempfile.TemporaryDirectory() as temp:
+            turned = json.loads(self.run_main(temp, '--turn', '1'))
+        self.assertAlmostEqual(turned['transform']['theta'], straight['transform']['theta'] - math.pi / 2)
 
 
 if __name__ == '__main__':
