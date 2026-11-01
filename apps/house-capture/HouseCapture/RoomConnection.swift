@@ -18,6 +18,20 @@ struct RoomDoor: Identifiable {
   }
 }
 
+extension RoomFootprint.Wall {
+  /// The active scan's RoomPlan walls, in its session frame.
+  static func load(house: HouseProject, room: HouseProject.Room) -> [RoomFootprint.Wall] {
+    guard let ref = room.active, let session = house.session(ref.session),
+          let data = try? Data(contentsOf: house.bundle(for: session).file("rooms/room-\(ref.index).json")),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let walls = json["walls"] as? [[String: Any]] else { return [] }
+    return walls.compactMap { w in
+      guard let t = w["transform"] as? [Float], t.count == 16, let d = w["dimensions"] as? [Float], d.count >= 2 else { return nil }
+      return .init(transform: simd_float4x4(columnMajor: t), width: d[0], height: d[1])
+    }
+  }
+}
+
 /// Doorway correspondence is user-verified; never silently treat separate maps as aligned.
 struct RoomConnection: View {
   let house: HouseProject
@@ -48,6 +62,16 @@ struct RoomConnection: View {
     result.zones[zi].aligned = true
     return result
   }
+  /// Overlap and floor-step check of the candidate placement against the reference room.
+  private var check: ConnectionCheck? {
+    guard let candidate, let target, let sr = source.active, let tr = target.active,
+          let ss = candidate.session(sr.session), let ts = house.session(tr.session) else { return nil }
+    let placed = RoomFootprint(walls: RoomFootprint.Wall.load(house: house, room: source), placement: candidate.toHouse(ss))
+    let reference = RoomFootprint(walls: RoomFootprint.Wall.load(house: house, room: target), placement: house.toHouse(ts))
+    guard !placed.outline.isEmpty, !reference.outline.isEmpty else { return nil }
+    return ConnectionCheck(placed: placed, reference: reference)
+  }
+
   var body: some View {
     Form {
       Section {
@@ -68,6 +92,15 @@ struct RoomConnection: View {
         if candidate == nil { Text("Choose compatible doorways (within 20 cm in width) in separately captured rooms with established tracking.").font(.caption) }
         Button("Preview connection") { previewing = true; checked = true }.disabled(candidate == nil)
         Text("Check walls, floor levels, and which side of the doorway each room occupies. This is a manual placement, not an automatic match.").font(.caption)
+        if let check {
+          Text(String(format: "Overlap with the other room: %.0f%% · floor step: %.0f cm", check.overlap * 100, check.floorStep * 100)).font(.caption)
+          if check.issues.contains(.overlap) {
+            Text("The rooms overlap: try the other orientation, or another doorway.").foregroundStyle(.orange)
+          }
+          if check.issues.contains(.floorStep) {
+            Text("The floors do not meet at the same height: check the doorway pair.").foregroundStyle(.orange)
+          }
+        }
         let companions = house.rooms.filter { $0.zone == source.zone && $0.id != source.id }.map(\.name)
         if !companions.isEmpty { Text("Also moves with this room: " + companions.joined(separator: ", ")).font(.caption) }
         Button("Save connection") {
@@ -108,12 +141,9 @@ private struct DoorwayMap: View {
   let doors: [RoomDoor]
   @Binding var selected: String
   private var segments: [(SIMD2<Float>, SIMD2<Float>)] {
-    guard let ref = room.active, let session = house.session(ref.session),
-          let data = try? Data(contentsOf: house.bundle(for: session).file("rooms/room-\(ref.index).json")),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let walls = json["walls"] as? [[String: Any]] else { return [] }
-    return walls.compactMap { w in
-      guard let t = w["transform"] as? [Float], t.count == 16, let d = w["dimensions"] as? [Float], let width = d.first else { return nil }
-      let center = SIMD2(t[12], t[14]), half = SIMD2(t[0], t[2]) * width / 2
+    RoomFootprint.Wall.load(house: house, room: room).map { w in
+      let center = SIMD2(w.transform.columns.3.x, w.transform.columns.3.z)
+      let half = SIMD2(w.transform.columns.0.x, w.transform.columns.0.z) * w.width / 2
       return (center-half, center+half)
     }
   }
