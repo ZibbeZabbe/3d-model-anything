@@ -10,8 +10,8 @@ each worker one file `demos/<room>/parts/<area>.ts` exporting `build(ctx: PartCo
 module loads `parts/*.ts` with `import.meta.glob`, wraps each build in try/catch, and honors
 `?parts=a,b` so workers can render just their own area. Write a shared BRIEF.md first: coordinates,
 walls table, soffits, reference files, render commands, rules (own file only, performance budget,
-representative photo comparisons and a clear stopping criterion, final report). Give each worker its own `CAP_SESSION` (agent-browser
-session) and `CAP_OUT`. Workers report shared-file problems (door handles, wall jogs) back instead of
+representative photo comparisons and a clear stopping criterion, final report). Give each worker its own `CAP_OUT` (each
+capture launches its own browser). Workers report shared-file problems (door handles, wall jogs) back instead of
 editing the shell; you fix those and integrate. Include the approved visual benchmark and the
 quality-first requirement in every worker brief. Split broad assignments further when needed to
 give individual items proper attention; do not cap a worker at a quick pass. Review the worker's

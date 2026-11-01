@@ -135,7 +135,7 @@ that local frame and add them to the wall's group, so dollhouse cutaway hides th
 - Poly Haven returns 403 to Python's urllib; use curl.
 - Vite serves an HTML error page for a module with a broken import. The capture page then never
   sets `data-ready`, and the screenshot waits forever: check the console.
-- agent-browser key names are plain (`keyboard down s`), not `KeyS`.
+- Playwright key names are DOM codes or keys (`page.keyboard.down('s')`).
 - Floors straddle histogram bins; use the area-weighted mean (the script does).
 - Asset names lie: look at a contact sheet (`fetch_textures.py sheet`).
 - Neighbor rooms need a saddle/threshold inside the wall thickness, or you see a black strip in

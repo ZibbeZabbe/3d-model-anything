@@ -16,5 +16,4 @@ else
   : ${CAP_OUT:="$PWD/captures"}
   : ${PHOTO_ROOT:="$PWD/public"}
 fi
-: ${CAP_URL:=http://localhost:5173}
-: ${CAP_SESSION:=scan-to-threejs}
+: ${CAP_URL:=http://localhost:5188} # apps/room-viewer/vite.config.ts server port
