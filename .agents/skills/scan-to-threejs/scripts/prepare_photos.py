@@ -11,8 +11,11 @@ import tempfile
 import shutil
 from PIL import Image
 
+DEFAULT_MAX_EDGE = 1280
+JPEG_QUALITY = 90
 
-def prepare(bundle, room, out, max_edge=1280):
+
+def prepare(bundle, room, out, max_edge=DEFAULT_MAX_EDGE):
     bundle = bundle.resolve()
     if out.exists():
         raise ValueError('output directory exists; choose a new directory')
@@ -31,7 +34,7 @@ def prepare(bundle, room, out, max_edge=1280):
                 # Do not apply EXIF transpose as well: that would rotate twice.
                 image = raw.convert('RGB').transpose(Image.Transpose.ROTATE_270)
                 image.thumbnail((max_edge, max_edge))
-                image.save(stage / f'{index:04d}.jpg', quality=90)
+                image.save(stage / f'{index:04d}.jpg', quality=JPEG_QUALITY)
         out.mkdir()
         for path in stage.iterdir():
             shutil.move(str(path), out / path.name)
@@ -43,7 +46,7 @@ def main():
     parser.add_argument('bundle', type=Path)
     parser.add_argument('room', type=Path, help='converted room JSON, not raw RoomPlan JSON')
     parser.add_argument('out', type=Path, help='new upright-photo directory')
-    parser.add_argument('--max-edge', type=int, default=1280)
+    parser.add_argument('--max-edge', type=int, default=DEFAULT_MAX_EDGE)
     args = parser.parse_args()
     try:
         print(f'{prepare(args.bundle, args.room, args.out, args.max_edge)} photos → {args.out}')

@@ -16,6 +16,12 @@ import shutil
 
 from bundle_to_room import flatten, mat, mul
 
+# Float noise tolerated in the last row, in the rotation's orthonormality and in its determinant.
+AFFINE_TOLERANCE = 1e-4
+ROTATION_TOLERANCE = 1e-3
+# Session alignments that place a scan in its zone; any other method still needs aligning.
+PLACED_ALIGNMENTS = ('first', 'relocalized', 'manual', 'icp')
+
 
 def rigid(values):
     if not isinstance(values, list) or len(values) != 16 or not all(
@@ -23,16 +29,16 @@ def rigid(values):
     ):
         raise ValueError('expected 16 finite column-major matrix values')
     m = mat(values)
-    if any(abs(m[3][i] - (1 if i == 3 else 0)) > 1e-4 for i in range(4)):
+    if any(abs(m[3][i] - (1 if i == 3 else 0)) > AFFINE_TOLERANCE for i in range(4)):
         raise ValueError('expected an affine transform')
     for i in range(3):
         for j in range(3):
-            if abs(sum(m[k][i] * m[k][j] for k in range(3)) - (i == j)) > 1e-3:
+            if abs(sum(m[k][i] * m[k][j] for k in range(3)) - (i == j)) > ROTATION_TOLERANCE:
                 raise ValueError('expected rigid rotation, without scale/shear')
     det = (m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])
            - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])
            + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]))
-    if abs(det - 1) > 1e-3:
+    if abs(det - 1) > ROTATION_TOLERANCE:
         raise ValueError('reflected coordinate frames are unsupported')
     return m
 
@@ -92,7 +98,7 @@ def export_house(root, out, room_id=None):
                 alignment = session['alignment']
                 if not zone.get('aligned'):
                     raise ValueError('zone placement is not aligned to the house')
-                if alignment['method'] not in ('first', 'relocalized', 'manual', 'icp'):
+                if alignment['method'] not in PLACED_ALIGNMENTS:
                     raise ValueError('session needs alignment: ' + alignment['method'])
                 session_to_house = mul(rigid(zone['toHouse']), rigid(alignment['toZone']))
                 room_index = active['index']
