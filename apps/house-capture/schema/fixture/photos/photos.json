@@ -1,0 +1,44 @@
+[
+  {
+    "blurPixels": 0.5,
+    "exposure": 0.0125,
+    "file": "photos/0000.jpg",
+    "height": 1440,
+    "highRes": false,
+    "intrinsics": [
+      1500,
+      0,
+      0,
+      0,
+      1500,
+      0,
+      960,
+      720,
+      1
+    ],
+    "manual": false,
+    "pass": "detail",
+    "room": 0,
+    "timestamp": 12.5,
+    "tracking": "normal",
+    "transform": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0.5,
+      1.5,
+      -2,
+      1
+    ],
+    "width": 1920
+  }
+]

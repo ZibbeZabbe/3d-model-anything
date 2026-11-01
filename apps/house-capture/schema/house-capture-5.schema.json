@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wesbos/3d-model-anything/house-capture-5.schema.json",
+  "title": "house-capture/5 session export",
+  "description": "Authoritative contract between the iPhone app (writer: ScanBundle.swift) and the Mac scripts (readers: .agents/skills/scan-to-threejs/scripts). Drift is caught by the reference export in fixture/: HouseCaptureTests/ExportContractTests checks the app writes it, scripts/test_export_contract.py checks it satisfies this schema and that the scripts read it. Optional fields are omitted when absent.",
+  "$defs": {
+    "matrix4": {
+      "description": "Column-major 4x4, translation in the last column.",
+      "type": "array", "items": { "type": "number" }, "minItems": 16, "maxItems": 16
+    },
+    "matrix3": {
+      "description": "Column-major 3x3 intrinsics: fx, 0, 0, 0, fy, 0, cx, cy, 1.",
+      "type": "array", "items": { "type": "number" }, "minItems": 9, "maxItems": 9
+    },
+    "relativePath": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "alignment": {
+      "type": "object",
+      "required": ["method", "toZone"],
+      "properties": {
+        "method": { "enum": ["first", "relocalized", "unaligned", "manual", "icp"] },
+        "toZone": { "$ref": "#/$defs/matrix4" },
+        "residualMeters": { "type": "number" },
+        "note": { "type": "string" }
+      }
+    },
+    "mesh": {
+      "type": "object",
+      "required": ["file", "anchors", "vertices", "faces"],
+      "properties": {
+        "file": { "$ref": "#/$defs/relativePath" },
+        "anchors": { "type": "integer" }, "vertices": { "type": "integer" }, "faces": { "type": "integer" }
+      }
+    },
+    "room": {
+      "type": "object",
+      "required": ["index", "name", "file", "usdz", "capturedAt", "walls", "doors", "windows", "openings", "objects"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "file": { "type": "string" },
+        "usdz": { "type": "string" },
+        "capturedAt": { "$ref": "#/$defs/timestamp" },
+        "walls": { "type": "integer" }, "doors": { "type": "integer" }, "windows": { "type": "integer" },
+        "openings": { "type": "integer" }, "objects": { "type": "integer" },
+        "mesh": { "$ref": "#/$defs/mesh" },
+        "coverage": { "type": "number" },
+        "photoCoverage": { "type": "integer" },
+        "detailSeconds": { "type": "number" },
+        "detailPhotos": { "type": "integer" },
+        "data": { "$ref": "#/$defs/relativePath" }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["format", "createdAt", "device", "systemVersion", "coordinateSystem", "house", "session", "zone", "rooms", "photos", "photoCount"],
+      "properties": {
+        "format": { "const": "house-capture/5" },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "endedAt": { "$ref": "#/$defs/timestamp" },
+        "device": { "type": "string" },
+        "systemVersion": { "type": "string" },
+        "coordinateSystem": { "type": "string" },
+        "house": { "type": "string" },
+        "houseName": { "type": "string" },
+        "session": { "type": "string" },
+        "zone": { "type": "string" },
+        "alignment": { "$ref": "#/$defs/alignment" },
+        "worldMap": { "$ref": "#/$defs/relativePath" },
+        "worldMapStatus": { "type": "string" },
+        "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+        "structure": { "$ref": "#/$defs/relativePath" },
+        "structureError": { "type": "string" },
+        "mesh": { "$ref": "#/$defs/mesh" },
+        "sceneReconstruction": { "type": "string" },
+        "photos": { "$ref": "#/$defs/relativePath" },
+        "photoCount": { "type": "integer", "minimum": 0 },
+        "depthFrames": { "$ref": "#/$defs/relativePath" },
+        "depthFrameCount": { "type": "integer", "minimum": 0 },
+        "diagnostics": { "type": "object" }
+      }
+    },
+    "photo": {
+      "type": "object",
+      "required": ["file", "room", "timestamp", "width", "height", "transform", "intrinsics", "tracking", "manual"],
+      "properties": {
+        "file": { "$ref": "#/$defs/relativePath" },
+        "room": { "type": "integer", "minimum": 0 },
+        "timestamp": { "type": "number" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "transform": { "$ref": "#/$defs/matrix4", "description": "Camera to session world; the camera looks down -Z." },
+        "intrinsics": { "$ref": "#/$defs/matrix3", "description": "For the raw landscape sensor pixels." },
+        "tracking": { "type": "string" },
+        "manual": { "type": "boolean" },
+        "exposure": { "type": "number" },
+        "blurPixels": { "type": "number" },
+        "pass": { "enum": ["layout", "detail"] },
+        "highRes": { "type": "boolean" },
+        "camera": { "type": "object" }
+      }
+    },
+    "photos": { "type": "array", "items": { "$ref": "#/$defs/photo" } },
+    "depthFrame": {
+      "type": "object",
+      "required": ["file", "confidence", "room", "timestamp", "width", "height", "transform", "intrinsics"],
+      "properties": {
+        "file": { "$ref": "#/$defs/relativePath", "description": "Float16 meters, row-major, raw DEFLATE." },
+        "confidence": { "$ref": "#/$defs/relativePath", "description": "UInt8 0-2, row-major." },
+        "rgb": { "$ref": "#/$defs/relativePath" },
+        "rgbIntrinsics": { "$ref": "#/$defs/matrix3" },
+        "camera": { "type": "object" },
+        "room": { "type": "integer", "minimum": 0 },
+        "timestamp": { "type": "number" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "transform": { "$ref": "#/$defs/matrix4" },
+        "intrinsics": { "$ref": "#/$defs/matrix3", "description": "Scaled to the depth map resolution." }
+      }
+    },
+    "depthFrames": { "type": "array", "items": { "$ref": "#/$defs/depthFrame" } }
+  }
+}
