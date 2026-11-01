@@ -300,7 +300,9 @@ class ExportTests(HouseFixture):
 
     def test_missing_room_scan_is_blocked_as_a_failed_conversion(self):
         self.office()['active']['index'] = 7
-        self.assertTrue(self.blocked_reason().startswith('room conversion failed: Traceback'))
+        reason = self.blocked_reason()
+        self.assertTrue(reason.startswith('room conversion failed: '), reason)
+        self.assertIn('room-7.json', reason)
 
     def test_room_whose_conversion_is_not_finite_leaves_no_file(self):
         broken = room_plan(0)
