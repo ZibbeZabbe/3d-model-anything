@@ -1,0 +1,8 @@
+room 4.01 × 3.01 m, heights [2.1, 2.5], 4 walls, 2 objects, 0 photos → <out>/plain.json
+  wall  0: ( -2.01, -1.50) → (  1.99, -1.50)  len 4.00 h 2.50  n (0,1)  door u2.05-2.95 v0.00-2.02
+  wall  1: (  2.01, -1.50) → (  1.98,  1.50)  len 3.00 h 2.50  n (-1,-0)  window u1.40-2.40 v1.00-2.00
+  wall  2: ( -2.00,  1.50) → (  2.00,  1.50)  len 4.00 h 2.50  n (0,1)  door u0.35-1.05 v0.00-2.00, opening u1.20-2.40 v0.10-2.30, door u2.80-3.60 v0.00-2.00
+  wall  3: ( -2.00,  1.50) → ( -2.01, -1.50)  len 3.00 h 2.10  n (1,-0)  
+  table        center (0.50,0.30) size [1.2, 0.8, 0.6] rotY -11°
+  sofa         center (-1.20,0.90) size [2.0, 0.9, 0.95] rotY -180°
+<out>/plan.png
