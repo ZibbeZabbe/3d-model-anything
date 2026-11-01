@@ -57,9 +57,14 @@ const BASEBOARD_PROFILE: [number, number][] = [
 const CROWN_PROFILE: [number, number][] = [
   [0, -0.11], [0.01, -0.11], [0.01, -0.1], [0.018, -0.095], ...arc(0.1, -0.095 + 0.0, 0.082, Math.PI, Math.PI / 2, 8).map(([s, t]): [number, number] => [s, t]), [0.105, -0.008], [0.11, 0], [0, 0],
 ];
+/** How far the slab runs past each end: the wall's own [start, end], else `ext` at both. */
+function slabExtension(w: WallDef, ext: number): [number, number] {
+  return w.ext ?? [ext, ext];
+}
+
 export function wallShape(w: WallDef, ext = 0.3) {
   // run past the corners so slabs overlap
-  const [e0, e1] = w.ext ?? [ext, ext];
+  const [e0, e1] = slabExtension(w, ext);
   const top = w.height ?? WALL_TOP;
   const shape = new THREE.Shape();
   // Openings that reach the floor are notches in the outline (holes can't touch the edge)
@@ -103,8 +108,8 @@ export function wallShape(w: WallDef, ext = 0.3) {
  * window jambs, but move the slab's end caps to group 0 (paint): at outside
  * corners they're visible, and real paint wraps around the corner.
  */
-function paintSlabEnds(geo: THREE.ExtrudeGeometry, w: WallDef) {
-  const [e0, e1] = w.ext ?? [0.3, 0.3];
+function paintSlabEnds(geo: THREE.ExtrudeGeometry, w: WallDef, ext: number) {
+  const [e0, e1] = slabExtension(w, ext);
   const pos = geo.getAttribute('position');
   const paint: number[] = [], trim: number[] = [];
   for (const g of geo.groups) {
@@ -131,7 +136,7 @@ export function buildWall(w: WallDef, m = materials(), ext = 0.3) {
   const top = w.height ?? WALL_TOP;
   const trim = w.trimMaterial ?? m.trim;
 
-  const geo = paintSlabEnds(new THREE.ExtrudeGeometry(wallShape(w, ext), { depth: w.thickness, bevelEnabled: false, curveSegments: 24 }), w);
+  const geo = paintSlabEnds(new THREE.ExtrudeGeometry(wallShape(w, ext), { depth: w.thickness, bevelEnabled: false, curveSegments: 24 }), w, ext);
   geo.translate(0, 0, -w.thickness);
   const slab = mesh(geo, [w.material ?? m.wall, trim]);
   slab.applyMatrix4(wallMatrix(w));

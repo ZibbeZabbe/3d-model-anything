@@ -163,6 +163,13 @@ describe('wall slab', () => {
     expect(atU(triangles(slab, PAINT), 4.1)).toHaveLength(2);
   });
 
+  it('paints the end caps at the extension given to the builder', () => {
+    const slab = slabOf(buildWall(wall([]), materials(), 0.5));
+
+    expect(atU(triangles(slab, PAINT), -0.5)).toHaveLength(2);
+    expect(atU(triangles(slab, PAINT), 4.5)).toHaveLength(2);
+  });
+
   it('leaves the top and bottom edges of a plain slab in trim', () => {
     const trim = triangles(slabOf(buildWall(wall([]))), TRIM);
 
