@@ -14,11 +14,7 @@ import sys
 import tempfile
 import shutil
 
-from bundle_to_room import mat, mul
-
-
-def flatten(m):
-    return [m[r][c] for c in range(4) for r in range(4)]
+from bundle_to_room import flatten, mat, mul
 
 
 def rigid(values):
