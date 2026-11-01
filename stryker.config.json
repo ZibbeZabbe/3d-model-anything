@@ -5,7 +5,10 @@
     "configFile": "vitest.config.ts"
   },
   "mutate": [
-    "packages/room-runtime/walls.ts"
+    "packages/room-runtime/walls.ts",
+    "packages/room-runtime/helpers.ts",
+    "packages/room-runtime/wall-overlaps.ts",
+    "packages/room-runtime/batch.ts"
   ],
   "coverageAnalysis": "perTest",
   "reporters": [
