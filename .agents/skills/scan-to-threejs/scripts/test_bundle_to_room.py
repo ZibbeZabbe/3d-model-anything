@@ -433,6 +433,27 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(self.pixel(image, 0.65, 0), (80, 200, 255))
         self.assertEqual(self.pixel(image, 1.65, 0), (120, 255, 160))
 
+    def deep(self):
+        result = self.result()  # a second wall along z makes the plan 2 m deep
+        result['walls'].append({'index': 1, 'a': [0, 0], 'b': [0, 2], 'u': [0, 0, 1], 'n': [1, 0, 0],
+                                'length': 2, 'height': 2.5, 'openings': []})
+        return result
+
+    def test_objects_are_drawn_as_turned_boxes(self):
+        result = self.deep()
+        # 1.6 m wide, 0.2 m deep, turned a quarter: it spans z, not x.
+        result['objects'] = [{'category': '', 'center': [1, 0, 0.5], 'size': [1.6, 1, 0.2], 'rotY': math.pi / 2}]
+        image = self.draw(result)
+        self.assertEqual(self.pixel(image, 1.02, 0.8), (70, 55, 30))
+        self.assertEqual(self.pixel(image, 1.4, 0.6), (18, 18, 22))
+
+    def test_photos_are_drawn_as_short_rays_along_their_view(self):
+        result = self.deep()
+        result['photos'] = [{'position': [1.3, 1.4, 0.3], 'forward': [0, -0.2, 2]}]
+        image = self.draw(result)
+        self.assertEqual(self.pixel(image, 1.3, 0.55), (255, 90, 160))
+        self.assertEqual(self.pixel(image, 1.3, 0.7), (18, 18, 22))
+
 
 class MainTests(unittest.TestCase):
     def test_main_writes_room_json_next_to_the_bundle_and_prints_the_summary(self):
@@ -446,6 +467,19 @@ class MainTests(unittest.TestCase):
         self.assertEqual(room['source'], 'b room 1')
         self.assertEqual([p['file'] for p in room['photos']], ['photos/0001.jpg', 'photos/0003.jpg'])
         self.assertEqual(printed.getvalue().splitlines(), b2r.summary(room, str(bundle / 'room.json')))
+
+    def test_main_draws_the_plan_when_asked(self):
+        import synthetic_bundle
+        with tempfile.TemporaryDirectory() as temp:
+            bundle = synthetic_bundle.write_bundle(Path(temp) / 'b', structure=synthetic_bundle.room_plan(),
+                                                   with_photos=False)
+            plan = Path(temp) / 'plan.png'
+            with mock.patch.object(sys, 'argv', ['bundle_to_room.py', str(bundle), '-o', str(Path(temp) / 'r.json'),
+                                                 '--plan', str(plan)]), \
+                    contextlib.redirect_stdout(io.StringIO()) as printed:
+                b2r.main()
+            self.assertTrue(plan.is_file())
+        self.assertEqual(printed.getvalue().splitlines()[-1], str(plan))
 
 
 if __name__ == '__main__':
