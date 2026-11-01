@@ -41,11 +41,10 @@ enum RoomJSON {
 extension RoomFootprint.Wall {
   /// The active scan's RoomPlan walls, in its session frame.
   static func load(house: HouseProject, room: HouseProject.Room) -> [RoomFootprint.Wall] {
-    guard let ref = room.active, let session = house.session(ref.session),
-          let data = try? Data(contentsOf: house.bundle(for: session).file("rooms/room-\(ref.index).json")),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let walls = json["walls"] as? [[String: Any]] else { return [] }
-    return walls.compactMap { w in
+    RoomJSON.load(house: house, room: room).map(parse) ?? []
+  }
+  static func parse(_ json: [String: Any]) -> [RoomFootprint.Wall] {
+    (json["walls"] as? [[String: Any]] ?? []).compactMap { w in
       guard let t = w["transform"] as? [Float], t.count == 16, let d = w["dimensions"] as? [Float], d.count >= 2 else { return nil }
       return .init(transform: simd_float4x4(columnMajor: t), width: d[0], height: d[1])
     }
