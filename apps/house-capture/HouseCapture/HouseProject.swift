@@ -117,7 +117,13 @@ extension HouseProject {
     try e.encode(self).write(to: url.appendingPathComponent("house.json"), options: .atomic)
   }
 
-  func delete() throws { try FileManager.default.removeItem(at: url) }
+  /// Deletes the house folder, archiving each session's diagnostics first (best effort).
+  func delete() throws {
+    let sessions = url.appendingPathComponent("sessions", isDirectory: true)
+    let folders = (try? FileManager.default.contentsOfDirectory(at: sessions, includingPropertiesForKeys: nil)) ?? []
+    for folder in folders { try? DiagnosticsArchive.standard.preserve(sessionFolder: folder, house: id) }
+    try FileManager.default.removeItem(at: url)
+  }
 
   func bundle(for session: Session) -> ScanBundle { ScanBundle(url: url.appendingPathComponent(session.folder, isDirectory: true)) }
 

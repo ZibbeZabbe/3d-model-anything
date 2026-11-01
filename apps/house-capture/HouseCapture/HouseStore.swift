@@ -187,6 +187,8 @@ extension HouseProject {
     }
     let house = try modify(houseID) { $0.removeSession(sessionID) }
     let folder = house.url.appendingPathComponent("sessions/\(sessionID)", isDirectory: true)
+    // Archiving is best effort: the user's deletion must not fail because of it.
+    try? DiagnosticsArchive.standard.preserve(sessionFolder: folder, house: houseID)
     if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
     try cleanTrackingGroups(houseID: houseID, affected: Set(before.session(sessionID).map { $0.rooms.isEmpty ? [] : [$0.zone] } ?? []))
   }
