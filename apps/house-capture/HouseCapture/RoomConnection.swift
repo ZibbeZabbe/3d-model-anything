@@ -45,7 +45,7 @@ extension RoomFootprint.Wall {
   }
   static func parse(_ json: [String: Any]) -> [RoomFootprint.Wall] {
     (json["walls"] as? [[String: Any]] ?? []).compactMap { w in
-      guard let t = w["transform"] as? [Float], t.count == 16, let d = w["dimensions"] as? [Float], d.count >= 2 else { return nil }
+      guard let t = RoomJSON.floats(w["transform"]), t.count == 16, let d = RoomJSON.floats(w["dimensions"]), d.count >= 2 else { return nil }
       return .init(transform: simd_float4x4(columnMajor: t), width: d[0], height: d[1])
     }
   }
