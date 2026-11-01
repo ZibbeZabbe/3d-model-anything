@@ -44,6 +44,7 @@ usable full-triangle photo keep their cached vertex colors.
 ## On disk
 
 ```
+Documents/Diagnostics/<house> <session>.json  diagnostics of deleted or abandoned sessions (last 20)
 Documents/Houses/<house>/
   house.json                         zones, sessions (+ alignment), rooms (active + history)
   zones/<area>/worldmap.arworldmap   latest map of the area (NSKeyedArchiver, secure coding)
@@ -76,6 +77,11 @@ landscape sensor image and `intrinsics` (fx, fy, cx, cy) match them — ignore E
 RoomPlan surface/object `transform`s are centered on the element; `dimensions` = width × height × depth.
 
 `diagnostics.json` is checkpointed every five seconds during capture, including an unfinished room.
+Deleting a session (including leaving a capture without saving) or a whole house first copies each
+session's diagnostics to `Documents/Diagnostics/`, visible in the Files app, so the evidence of a
+failed capture outlives it. Depth frames that cannot be written are left out of `depth/frames.json`
+and recorded as `depth frame` failures. Every JSON index and the mesh are replaced atomically, so a
+crash mid-write leaves the previous version.
 It records bounded memory/thermal/frame-age samples, feature and mesh counts, configuration changes,
 memory warnings, interruptions, and structured RoomPlan/ARKit/high-resolution-photo error chains
 (domain, code, failure reason and recovery suggestion). ARKit errors are observed through the existing
@@ -86,6 +92,13 @@ out a device tracking failure; preserve the failing session and correlate its ti
 `manifest.diagnostics`: RoomPlan's and the scan's AR configurations, frame-to-frame world jumps,
 white balance, an event log (tracking / mapping status changes, pauses, map saves), how
 relocalization went (seconds to *normal* / *verified*, residual) and periodic live-vs-saved mesh checks.
+
+## Tests
+
+`HouseCaptureTests` (XCTest) covers file safety, depth frame storage, the diagnostics archive, the
+connection check and the export contract (`schema/house-capture-5.schema.json`, checked against the
+reference export in `schema/fixture/`). From the repository root: `npm run test:swift`, then
+`npm run test:swift:coverage`; `npm run test:swift:mutation` runs muter on the covered files.
 
 ## Launch arguments (developer)
 
@@ -143,7 +156,7 @@ This benchmark uses photo poses without depth occlusion; it is not a live phone 
 
 Thermal pressure, memory warnings and long scans reduce depth recording, photo frequency and coverage evaluation work. High-resolution automatic photos are disabled under constrained budgets. After a large map or four rooms, save and start a fresh scan rather than extending the same map further.
 
-After each room, **Review saved room in 3D** opens the textured preview. Use coverage colours to inspect missing photography. A room's **Connect to another room** action shows numbered doorway plans, supports a 180-degree orientation choice, and requires a combined preview before saving. This is manual doorway alignment; it does not claim an automatic verified registration. The reference room must already be placed in the house and both captures must have established tracking.
+After each room, **Review saved room in 3D** opens the textured preview. Use coverage colours to inspect missing photography. A room's **Connect to another room** action shows numbered doorway plans, supports a 180-degree orientation choice, and requires a combined preview before saving. This is manual doorway alignment; it does not claim an automatic verified registration. Before saving, the screen measures the placement: how much of the room overlaps the reference room (rooms on the two sides of a doorway should not overlap; a large overlap usually means the wrong orientation) and the floor height difference. Above 10% overlap or 5 cm of floor step it shows a warning. The reference room must already be placed in the house and both captures must have established tracking.
 
 ## Sharing and importing
 

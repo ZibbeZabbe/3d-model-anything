@@ -44,9 +44,22 @@ Example request:
 
 > Use scan-to-threejs to rebuild the room in data/captures-in/my-room. Inspect the measurements and photos, create an editable scene, and compare rendered views with the original photographs.
 
-Start with [the format guide](.agents/skills/scan-to-threejs/references/house-capture.md) and [project layout](.agents/skills/scan-to-threejs/references/project-layout.md). Helpers need Python 3; photo comparisons need Pillow, and optional depth reconstruction needs NumPy, Open3D and Pillow. Capture scripts use the `agent-browser` CLI.
+Start with [the format guide](.agents/skills/scan-to-threejs/references/house-capture.md) and [project layout](.agents/skills/scan-to-threejs/references/project-layout.md). Python helpers run on Python 3.12 with dependencies pinned by `uv` (`uv sync`, then `uv run …`); Open3D does not support newer Python versions. Capture scripts use Playwright (`npx playwright install chromium`).
 
 A new room goes in `demos/<id>/` and is registered in `demos/index.ts`. The office example retains its earlier reconstruction layers (`office-v2`, `office-latest`, `office-v4`) to preserve the final geometry.
+
+## Tests
+
+| Part | Tests | Coverage | Mutation |
+|---|---|---|---|
+| Viewer and runtime (TypeScript) | `npm test` | `npm run test:coverage` | `npm run test:mutation` (Stryker) |
+| Python helpers | `npm run test:python` | `npm run test:python:coverage` | `npm run test:python:mutation` (mutmut) |
+| iPhone app (Swift) | `npm run test:swift` | `npm run test:swift:coverage` | `npm run test:swift:mutation` (muter) |
+| Rendering | `npm run test:visual` (Docker, Linux baselines) | | |
+
+Python tooling needs [uv](https://docs.astral.sh/uv/) (`uv sync`); the iPhone tests need Xcode,
+XcodeGen and, for mutation testing, `brew install muter-mutation-testing/formulae/muter`. After an
+intended rendering change, `npm run test:visual:update` rewrites the baselines.
 
 ## Privacy and licensing
 
