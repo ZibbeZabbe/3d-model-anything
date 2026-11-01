@@ -47,17 +47,17 @@ class RigidTests(unittest.TestCase):
     def test_values_must_be_a_list_of_sixteen_numbers(self):
         for values in [tuple(IDENTITY), IDENTITY[:15], IDENTITY + [0], IDENTITY[:15] + ['1'],
                        IDENTITY[:15] + [True], IDENTITY[:15] + [None]]:
-            with self.assertRaisesRegex(ValueError, 'expected 16 finite column-major matrix values'):
+            with self.assertRaisesRegex(ValueError, r'^expected 16 finite column-major matrix values$'):
                 rigid(values)
 
     def test_values_must_be_finite(self):
         for bad in [math.nan, math.inf, -math.inf]:
-            with self.assertRaisesRegex(ValueError, 'expected 16 finite'):
+            with self.assertRaisesRegex(ValueError, r'^expected 16 finite column-major matrix values$'):
                 rigid(with_entry(IDENTITY, 0, 3, bad))
 
     def test_last_row_must_be_affine(self):
         for column, value in [(0, 0.5), (1, 0.5), (2, 0.5), (3, 2), (3, 0)]:
-            with self.assertRaisesRegex(ValueError, 'expected an affine transform'):
+            with self.assertRaisesRegex(ValueError, r'^expected an affine transform$'):
                 rigid(with_entry(IDENTITY, 3, column, value))
 
     def test_last_row_tolerates_float_noise(self):
@@ -65,24 +65,24 @@ class RigidTests(unittest.TestCase):
         self.assertEqual(rigid(noisy)[3][3], 1 - 5e-5)
 
     def test_last_row_noise_above_the_tolerance_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'affine'):
+        with self.assertRaisesRegex(ValueError, r'^expected an affine transform$'):
             rigid(with_entry(IDENTITY, 3, 2, 2e-4))
 
     def test_scale_is_rejected(self):
         for axis in range(3):
-            with self.assertRaisesRegex(ValueError, 'expected rigid rotation, without scale/shear'):
+            with self.assertRaisesRegex(ValueError, r'^expected rigid rotation, without scale/shear$'):
                 rigid(with_entry(IDENTITY, axis, axis, 1.1))
 
     def test_shear_is_rejected(self):
         for row, column in [(0, 1), (1, 2), (2, 0)]:
-            with self.assertRaisesRegex(ValueError, 'scale/shear'):
+            with self.assertRaisesRegex(ValueError, r'^expected rigid rotation, without scale/shear$'):
                 rigid(with_entry(IDENTITY, row, column, 0.1))
 
     def test_rotation_noise_within_the_tolerance_is_accepted(self):
         rigid(with_entry(IDENTITY, 0, 1, 4e-4))
 
     def test_rotation_noise_above_the_tolerance_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, 'scale/shear'):
+        with self.assertRaisesRegex(ValueError, r'^expected rigid rotation, without scale/shear$'):
             rigid(with_entry(IDENTITY, 0, 1, 2e-3))
 
     def test_a_mirrored_frame_is_rejected(self):
@@ -90,7 +90,7 @@ class RigidTests(unittest.TestCase):
             mirrored = general_rotation()
             for row in range(3):
                 mirrored[row][axis] = -mirrored[row][axis]
-            with self.assertRaisesRegex(ValueError, 'reflected coordinate frames are unsupported'):
+            with self.assertRaisesRegex(ValueError, r'^reflected coordinate frames are unsupported$'):
                 rigid(flatten(mirrored))
 
     def test_inverse_undoes_a_rigid_transform(self):
@@ -101,7 +101,9 @@ class RigidTests(unittest.TestCase):
                     self.assertAlmostEqual(product[r][c], 1 if r == c else 0)
 
     def test_inverse_keeps_an_affine_last_row(self):
-        self.assertEqual(inverse_rigid(general_rotation(1, 2, 3))[3], [0, 0, 0, 1])
+        inverse = inverse_rigid(general_rotation(1, 2, 3))
+        self.assertEqual(len(inverse), 4)
+        self.assertEqual(inverse[3], [0, 0, 0, 1])
 
 
 class HelperTests(unittest.TestCase):
@@ -110,7 +112,7 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(keyed([a, b]), {'a': a, 'b': b})
 
     def test_keyed_rejects_duplicate_ids(self):
-        with self.assertRaisesRegex(ValueError, 'duplicate IDs in house metadata'):
+        with self.assertRaisesRegex(ValueError, r'^duplicate IDs in house metadata$'):
             keyed([{'id': 'a'}, {'id': 'a'}])
 
     def test_child_resolves_inside_the_root(self):
@@ -120,7 +122,7 @@ class HelperTests(unittest.TestCase):
 
     def test_child_refuses_a_path_leaving_the_root(self):
         with tempfile.TemporaryDirectory() as temp:
-            with self.assertRaisesRegex(ValueError, 'path escapes house folder: ../x'):
+            with self.assertRaisesRegex(ValueError, r'^path escapes house folder: \.\./x$'):
                 child(Path(temp).resolve(), '../x')
 
 
@@ -178,7 +180,7 @@ class ExportTests(HouseFixture):
 
     def test_another_format_is_refused(self):
         self.house['format'] = 'house-project/2'
-        with self.assertRaisesRegex(ValueError, 'expected house-project/1'):
+        with self.assertRaisesRegex(ValueError, r'^expected house-project/1$'):
             self.export()
 
     def test_duplicate_zone_session_or_room_ids_are_refused(self):
@@ -186,18 +188,18 @@ class ExportTests(HouseFixture):
             house = copy.deepcopy(self.house)
             house[key].append(copy.deepcopy(house[key][0]))
             (self.root / 'house.json').write_text(json.dumps(house))
-            with self.assertRaisesRegex(ValueError, 'duplicate IDs', msg=key):
+            with self.assertRaisesRegex(ValueError, r'^duplicate IDs in house metadata$', msg=key):
                 export_house(self.root, self.out)
         self.assertFalse(self.out.exists())
 
     def test_unknown_room_selection_is_refused_before_writing(self):
-        with self.assertRaisesRegex(ValueError, 'no matching rooms'):
+        with self.assertRaisesRegex(ValueError, r'^no matching rooms$'):
             self.export('attic')
         self.assertFalse(self.out.exists())
 
     def test_existing_output_is_refused(self):
         self.out.mkdir()
-        with self.assertRaisesRegex(ValueError, 'output directory already exists'):
+        with self.assertRaisesRegex(ValueError, r'^output directory already exists; choose a new output directory$'):
             self.export()
 
     def test_index_describes_the_house_and_its_source(self):

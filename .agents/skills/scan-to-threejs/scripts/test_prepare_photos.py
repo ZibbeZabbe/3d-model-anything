@@ -15,6 +15,7 @@ import prepare_photos
 
 DEFAULT_MAX_EDGE = 1280
 RED, BLUE = (255, 0, 0), (0, 0, 255)
+JPEG_QUALITY = 90
 
 
 def split_image(size, left=RED, right=BLUE, mode='RGB'):
@@ -84,13 +85,21 @@ class PrepareTests(PhotoBundle):
         with Image.open(self.base / 'out/0000.jpg') as upright:
             self.assertEqual(upright.size, (20, 40))
 
+    def test_photos_are_saved_at_jpeg_quality_90(self):
+        self.photos(split_image((64, 32)))
+        self.run_prepare()
+        reference = self.base / 'reference.jpg'
+        split_image((64, 32)).transpose(Image.Transpose.ROTATE_270).save(reference, quality=JPEG_QUALITY)
+        with Image.open(self.base / 'out/0000.jpg') as saved, Image.open(reference) as expected:
+            self.assertEqual(saved.quantization, expected.quantization)
+
     def test_a_one_pixel_edge_is_allowed(self):
         self.photos(Image.new('RGB', (40, 20)))
         self.assertEqual(self.run_prepare(max_edge=1), 1)
 
     def test_a_zero_edge_is_rejected(self):
         self.photos(Image.new('RGB', (40, 20)))
-        with self.assertRaisesRegex(ValueError, 'max-edge must be positive'):
+        with self.assertRaisesRegex(ValueError, r'^max-edge must be positive$'):
             self.run_prepare(max_edge=0)
         self.assertFalse((self.base / 'out').exists())
 
@@ -105,14 +114,14 @@ class PrepareTests(PhotoBundle):
         self.photos(Image.new('RGB', (8, 4)))
         (self.base / 'out').mkdir()
         (self.base / 'out/keep.txt').write_text('mine')
-        with self.assertRaisesRegex(ValueError, 'output directory exists'):
+        with self.assertRaisesRegex(ValueError, r'^output directory exists; choose a new directory$'):
             self.run_prepare()
         self.assertEqual(os.listdir(self.base / 'out'), ['keep.txt'])
 
     def test_photo_outside_the_bundle_is_refused(self):
         Image.new('RGB', (8, 4)).save(self.base / 'secret.png')
         self.room.write_text(json.dumps({'photos': [{'file': '../secret.png'}]}))
-        with self.assertRaisesRegex(ValueError, 'photo path escapes bundle'):
+        with self.assertRaisesRegex(ValueError, r'^photo path escapes bundle$'):
             self.run_prepare()
         self.assertFalse((self.base / 'out').exists())
 
@@ -156,6 +165,12 @@ class MainTests(PhotoBundle):
         self.main('--max-edge', '10')
         with Image.open(self.base / 'out/0000.jpg') as upright:
             self.assertEqual(upright.size, (5, 10))
+
+    def test_main_caps_the_long_edge_at_1280_by_default(self):
+        self.photos(Image.new('RGB', (3000, 1500)))
+        self.main()
+        with Image.open(self.base / 'out/0000.jpg') as upright:
+            self.assertEqual(upright.size, (DEFAULT_MAX_EDGE // 2, DEFAULT_MAX_EDGE))
 
     def test_main_reports_a_refusal_as_a_usage_error(self):
         self.photos(Image.new('RGB', (8, 4)))
