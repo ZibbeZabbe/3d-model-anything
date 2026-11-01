@@ -13,15 +13,32 @@ Output JSON:
   objects    [{category, center, size, rotY, front}]  (rotY turns local +z to `front`)
   photos     [{file, position, forward, up, fovY, aspect}] in room coords, upright (portrait) framing
 --plan draws the result with wall indices and u ticks every 0.5 m for annotating.
+
+The conversion itself is `convert_room`, a pure function of the RoomPlan dict and the
+photo index; `main` only parses arguments, reads and writes files and prints a summary.
 """
 import argparse
 import json
 import math
 import os
 
+# ×4 folds the 90° symmetry of a rectilinear room into one direction.
+QUARTER_FOLD = 4
+# How far inside the wall face (m) the interior side is probed against the floor polygon.
+INTERIOR_PROBE_M = 0.05
+# An opening whose bottom is closer to the floor than this (m) starts at the floor.
+FLOOR_LEVEL_SILL_M = 0.06
+OPENING_KINDS = ('doors', 'windows', 'openings')
+
 
 def mat(t):
+    """Column-major flat list of 16 values -> 4x4 row list."""
     return [[t[c * 4 + r] for c in range(4)] for r in range(4)]
+
+
+def flatten(m):
+    """4x4 row list -> column-major flat list of 16 values (inverse of `mat`)."""
+    return [m[r][c] for c in range(4) for r in range(4)]
 
 
 def col(m, c):
@@ -33,8 +50,209 @@ def mul(a, b):
 
 
 def apply(m, p, w=1.0):
+    """Transform a point (w=1) or a direction (w=0) by a 4x4 matrix."""
     v = [p[0], p[1], p[2], w]
     return [sum(m[i][k] * v[k] for k in range(4)) for i in range(3)]
+
+
+def floor_height(room):
+    """World y of the floor: the floor surface if present, else the lowest wall bottom."""
+    if room.get('floors'):
+        return mat(room['floors'][0]['transform'])[1][3]
+    return min(mat(w['transform'])[1][3] - w['dimensions'][1] / 2 for w in room['walls'])
+
+
+def heading(walls, turn=0):
+    """Angle (rad, atan2(z, x)) the walls run at, length-weighted mod 90°, minus `turn` quarters."""
+    sx = sy = 0.0
+    for w in walls:
+        x = col(mat(w['transform']), 0)
+        ang = math.atan2(x[2], x[0]) * QUARTER_FOLD
+        sx += math.cos(ang) * w['dimensions'][0]
+        sy += math.sin(ang) * w['dimensions'][0]
+    theta = math.atan2(sy, sx) / QUARTER_FOLD  # walls run at theta (+k·90°) in world x/z
+    return theta - turn * math.pi / 2
+
+
+def world_to_room(walls, theta, floor_y):
+    """Rotate by -theta about Y, then center the wall ends and drop the floor to y=0.
+
+    Returns (worldToRoom 4x4, [cx, cz]) where the center is in rotated world x/z.
+    """
+    c, s = math.cos(-theta), math.sin(-theta)
+    # rotation that maps world direction at angle theta (atan2(z, x)) onto +x
+    rotation = [[c, 0, -s, 0], [0, 1, 0, 0], [s, 0, c, 0], [0, 0, 0, 1]]
+    ends = []
+    for w in walls:
+        m = mat(w['transform'])
+        ctr, x = col(m, 3), col(m, 0)
+        hw = w['dimensions'][0] / 2
+        for sgn in (-1, 1):
+            ends.append(apply(rotation, [ctr[0] + x[0] * sgn * hw, 0, ctr[2] + x[2] * sgn * hw]))
+    cx = (min(e[0] for e in ends) + max(e[0] for e in ends)) / 2
+    cz = (min(e[2] for e in ends) + max(e[2] for e in ends)) / 2
+    translation = [[1, 0, 0, -cx], [0, 1, 0, -floor_y], [0, 0, 1, -cz], [0, 0, 0, 1]]
+    return mul(translation, rotation), [cx, cz]
+
+
+def floor_polygon(room, w2r):
+    """Floor outline [[x, z], ...] in room coords, counter-clockwise seen from above, or None."""
+    floors = room.get('floors')
+    if not (floors and floors[0].get('polygonCorners')):
+        return None
+    fm = mat(floors[0]['transform'])
+    poly = [apply(w2r, apply(fm, [p[0], p[1], p[2]])) for p in floors[0]['polygonCorners']]
+    poly = [[round(p[0], 4), round(p[2], 4)] for p in poly]
+    if signed_area(poly) < 0:
+        poly.reverse()
+    return poly
+
+
+def signed_area(poly):
+    """Twice the signed area in x/(-z): positive when counter-clockwise seen from above (+y)."""
+    n = len(poly)
+    return sum(poly[i][0] * -poly[(i + 1) % n][1] - poly[(i + 1) % n][0] * -poly[i][1] for i in range(n))
+
+
+def inside(poly, x, z):
+    """Even-odd point-in-polygon test; without a polygon every point counts as inside."""
+    if not poly:
+        return True
+    hit = False
+    for i in range(len(poly)):
+        (x1, z1), (x2, z2) = poly[i], poly[(i + 1) % len(poly)]
+        if (z1 > z) != (z2 > z) and x < x1 + (z - z1) * (x2 - x1) / (z2 - z1):
+            hit = not hit
+    return hit
+
+
+def openings_by_wall(room):
+    """parentIdentifier -> [(kind, element)] for doors, windows and openings, in file order."""
+    kids = {}
+    for kind in OPENING_KINDS:
+        for e in room.get(kind, []):
+            kids.setdefault(e.get('parentIdentifier'), []).append((kind[:-1], e))
+    return kids
+
+
+def convert_opening(kind, element, w2r, origin, u):
+    """One door/window/opening as u/v extents on its wall (u from `origin`, v from the floor)."""
+    ec = apply(w2r, col(mat(element['transform']), 3))
+    du = (ec[0] - origin[0]) * u[0] + (ec[2] - origin[2]) * u[2]
+    ew, eh = element['dimensions'][0], element['dimensions'][1]
+    v0 = ec[1] - eh / 2
+    return {
+        'kind': kind,
+        'u0': round(du - ew / 2, 3), 'u1': round(du + ew / 2, 3),
+        'v0': 0.0 if v0 < FLOOR_LEVEL_SILL_M else round(v0, 3), 'v1': round(ec[1] + eh / 2, 3),
+        'isOpen': bool(element['category'].get('door', {}).get('isOpen', False)) if kind == 'door' else None,
+    }
+
+
+def convert_wall(index, wall, w2r, poly, kids):
+    """One wall in room coords, its normal turned towards the inside of `poly`."""
+    m = mat(wall['transform'])
+    ctr = apply(w2r, col(m, 3))
+    u = apply(w2r, col(m, 0), 0.0)
+    length, height = wall['dimensions'][0], wall['dimensions'][1]
+    n = [-u[2], 0, u[0]]  # u × up
+    if not inside(poly, ctr[0] + n[0] * INTERIOR_PROBE_M, ctr[2] + n[2] * INTERIOR_PROBE_M):
+        u = [-u[0], 0, -u[2]]
+        n = [-n[0], 0, -n[2]]
+    origin = [ctr[0] - u[0] * length / 2, 0, ctr[2] - u[2] * length / 2]
+    b = [origin[0] + u[0] * length, origin[2] + u[2] * length]
+    openings = [convert_opening(kind, e, w2r, origin, u) for kind, e in kids.get(wall['identifier'], [])]
+    return {
+        'index': index,
+        'a': [round(origin[0], 4), round(origin[2], 4)],
+        'b': [round(b[0], 4), round(b[1], 4)],
+        'height': round(height, 3),
+        'origin': [round(v, 4) for v in origin],
+        'u': [round(v, 5) for v in u],
+        'n': [round(v, 5) for v in n],
+        'length': round(length, 4),
+        'confidence': next(iter(wall['confidence'])),
+        'openings': sorted(openings, key=lambda o: o['u0']),
+    }
+
+
+def convert_object(obj, w2r):
+    """One furniture box in room coords; rotY turns local +z onto `front`."""
+    m = mat(obj['transform'])
+    ctr = apply(w2r, col(m, 3))
+    f = apply(w2r, col(m, 2), 0.0)
+    return {
+        'category': next(iter(obj['category'])),
+        'center': [round(v, 3) for v in ctr],
+        'size': [round(v, 3) for v in obj['dimensions']],
+        'rotY': round(math.atan2(f[0], f[2]), 4),
+        'front': [round(f[0], 3), round(f[2], 3)],
+    }
+
+
+def room_photos(photos, room_index):
+    """Photos taken in room `room_index`, or all of them when it is None, in index order."""
+    return [p for p in photos if room_index is None or p['room'] == room_index]
+
+
+def convert_photo(photo, w2r):
+    """One camera pose in room coords, upright framing: image up = sensor -x, right = sensor +y."""
+    pm = mat(photo['transform'])
+    pos = apply(w2r, col(pm, 3))
+    fwd = apply(w2r, [-v for v in col(pm, 2)], 0.0)
+    up = apply(w2r, [-v for v in col(pm, 0)], 0.0)
+    fx = photo['intrinsics'][0]
+    # upright image is height=sensor width; vertical fov spans the sensor's x axis
+    fov_y = math.degrees(2 * math.atan(photo['width'] / 2 / fx))
+    return {
+        'file': photo['file'], 'position': [round(v, 4) for v in pos], 'forward': [round(v, 5) for v in fwd],
+        'up': [round(v, 5) for v in up], 'fovY': round(fov_y, 3), 'aspect': round(photo['height'] / photo['width'], 5),
+        'blurPixels': photo.get('blurPixels'),
+    }
+
+
+def convert_room(room, photos, source, turn=0):
+    """RoomPlan room dict + its photos -> the room.json document.
+
+    `photos` is already restricted to this room (see `room_photos`); `turn` adds quarter
+    turns (counter-clockwise seen from above) to match another scan.
+    """
+    walls = room['walls']
+    floor_y = floor_height(room)
+    theta = heading(walls, turn)
+    w2r, center = world_to_room(walls, theta, floor_y)
+    poly = floor_polygon(room, w2r)
+    kids = openings_by_wall(room)
+    return {
+        'source': source,
+        'transform': {'theta': theta, 'center': center, 'floorY': floor_y, 'worldToRoom': flatten(w2r)},
+        'polygon': poly,
+        'walls': [convert_wall(i, w, w2r, poly, kids) for i, w in enumerate(walls)],
+        'objects': [convert_object(o, w2r) for o in room.get('objects', [])],
+        'photos': [convert_photo(p, w2r) for p in photos],
+    }
+
+
+def source_name(bundle, room_index):
+    """Label of the converted room: the bundle folder name, plus the room index if any."""
+    return os.path.basename(os.path.normpath(bundle)) + ('' if room_index is None else f' room {room_index}')
+
+
+def summary(result, out):
+    """Printed lines: overall size and counts, then one line per wall and per object."""
+    walls, objects = result['walls'], result['objects']
+    xs = [p for w in walls for p in (w['a'][0], w['b'][0])]
+    zs = [p for w in walls for p in (w['a'][1], w['b'][1])]
+    lines = [f'room {max(xs) - min(xs):.2f} × {max(zs) - min(zs):.2f} m, heights {sorted({w["height"] for w in walls})}, '
+             f'{len(walls)} walls, {len(objects)} objects, {len(result["photos"])} photos → {out}']
+    for w in walls:
+        ops = ', '.join(f"{o['kind']} u{o['u0']:.2f}-{o['u1']:.2f} v{o['v0']:.2f}-{o['v1']:.2f}" for o in w['openings'])
+        lines.append(f"  wall {w['index']:2d}: ({w['a'][0]:6.2f},{w['a'][1]:6.2f}) → ({w['b'][0]:6.2f},{w['b'][1]:6.2f})  "
+                     f"len {w['length']:.2f} h {w['height']:.2f}  n ({w['n'][0]:.0f},{w['n'][2]:.0f})  {ops}")
+    for o in objects:
+        lines.append(f"  {o['category']:12s} center ({o['center'][0]:.2f},{o['center'][2]:.2f}) size {o['size']} "
+                     f"rotY {math.degrees(o['rotY']):.0f}°")
+    return lines
 
 
 def main():
@@ -47,162 +265,20 @@ def main():
     a = ap.parse_args()
 
     src = os.path.join(a.bundle, 'structure.json' if a.room is None else f'rooms/room-{a.room}.json')
-    S = json.load(open(src))
-    walls = S['walls']
-
-    # --- floor height: floor surface if present, else wall bottoms --------------
-    if S.get('floors'):
-        floorY = mat(S['floors'][0]['transform'])[1][3]
-    else:
-        floorY = min(mat(w['transform'])[1][3] - w['dimensions'][1] / 2 for w in walls)
-
-    # --- heading: length-weighted wall direction mod 90° -------------------------
-    sx = sy = 0.0
-    for w in walls:
-        x = col(mat(w['transform']), 0)
-        ang = math.atan2(x[2], x[0]) * 4  # ×4 folds 90° symmetry
-        sx += math.cos(ang) * w['dimensions'][0]
-        sy += math.sin(ang) * w['dimensions'][0]
-    theta = math.atan2(sy, sx) / 4  # walls run at theta (+k·90°) in world x/z
-    theta -= a.turn * math.pi / 2
-
-    # rotate by -theta about Y (x/z plane), then center
-    c, s = math.cos(-theta), math.sin(-theta)
-    # rotation that maps world direction at angle theta (atan2(z, x)) onto +x
-    R = [[c, 0, -s, 0], [0, 1, 0, 0], [s, 0, c, 0], [0, 0, 0, 1]]
-    ends = []
-    for w in walls:
-        m = mat(w['transform'])
-        ctr, x = col(m, 3), col(m, 0)
-        hw = w['dimensions'][0] / 2
-        for sgn in (-1, 1):
-            ends.append(apply(R, [ctr[0] + x[0] * sgn * hw, 0, ctr[2] + x[2] * sgn * hw]))
-    cx = (min(e[0] for e in ends) + max(e[0] for e in ends)) / 2
-    cz = (min(e[2] for e in ends) + max(e[2] for e in ends)) / 2
-    T = [[1, 0, 0, -cx], [0, 1, 0, -floorY], [0, 0, 1, -cz], [0, 0, 0, 1]]
-    W2R = mul(T, R)  # world → room
-    to_room = lambda p: apply(W2R, p)
-    dir_room = lambda d: apply(W2R, d, 0.0)
-
-    # --- floor polygon (for inside/outside tests) --------------------------------
-    poly = None
-    if S.get('floors') and S['floors'][0].get('polygonCorners'):
-        fm = mat(S['floors'][0]['transform'])
-        poly = [to_room(apply(fm, [p[0], p[1], p[2]])) for p in S['floors'][0]['polygonCorners']]
-        poly = [[round(p[0], 4), round(p[2], 4)] for p in poly]
-
-    def inside(x, z):
-        if not poly:
-            return True
-        hit = False
-        for i in range(len(poly)):
-            (x1, z1), (x2, z2) = poly[i], poly[(i + 1) % len(poly)]
-            if (z1 > z) != (z2 > z) and x < x1 + (z - z1) * (x2 - x1) / (z2 - z1):
-                hit = not hit
-        return hit
-
-    if poly:  # make it counter-clockwise seen from above (+y): signed area in x/(-z)
-        area = sum(poly[i][0] * -poly[(i + 1) % len(poly)][1] - poly[(i + 1) % len(poly)][0] * -poly[i][1] for i in range(len(poly)))
-        if area < 0:
-            poly.reverse()
-
-    # --- walls ---------------------------------------------------------------------
-    kids = {}
-    for kind in ('doors', 'windows', 'openings'):
-        for e in S.get(kind, []):
-            kids.setdefault(e.get('parentIdentifier'), []).append((kind[:-1], e))
-
-    out_walls = []
-    for i, w in enumerate(walls):
-        m = mat(w['transform'])
-        ctr = to_room(col(m, 3))
-        u = dir_room(col(m, 0))
-        length, height = w['dimensions'][0], w['dimensions'][1]
-        n = [-u[2], 0, u[0]]  # u × up
-        mid = [ctr[0], ctr[2]]
-        if not inside(mid[0] + n[0] * 0.05, mid[1] + n[2] * 0.05):
-            u = [-u[0], 0, -u[2]]
-            n = [-n[0], 0, -n[2]]
-        origin = [ctr[0] - u[0] * length / 2, 0, ctr[2] - u[2] * length / 2]
-        b = [origin[0] + u[0] * length, origin[2] + u[2] * length]
-        openings = []
-        for kind, e in kids.get(w['identifier'], []):
-            em = mat(e['transform'])
-            ec = to_room(col(em, 3))
-            du = (ec[0] - origin[0]) * u[0] + (ec[2] - origin[2]) * u[2]
-            ew, eh = e['dimensions'][0], e['dimensions'][1]
-            v0 = ec[1] - eh / 2
-            openings.append({
-                'kind': kind,
-                'u0': round(du - ew / 2, 3), 'u1': round(du + ew / 2, 3),
-                'v0': 0.0 if v0 < 0.06 else round(v0, 3), 'v1': round(ec[1] + eh / 2, 3),
-                'isOpen': bool(e['category'].get('door', {}).get('isOpen', False)) if kind == 'door' else None,
-            })
-        out_walls.append({
-            'index': i,
-            'a': [round(origin[0], 4), round(origin[2], 4)],
-            'b': [round(b[0], 4), round(b[1], 4)],
-            'height': round(height, 3),
-            'origin': [round(v, 4) for v in origin],
-            'u': [round(v, 5) for v in u],
-            'n': [round(v, 5) for v in n],
-            'length': round(length, 4),
-            'confidence': next(iter(w['confidence'])),
-            'openings': sorted(openings, key=lambda o: o['u0']),
-        })
-
-    # --- objects -------------------------------------------------------------------
-    objects = []
-    for o in S.get('objects', []):
-        m = mat(o['transform'])
-        ctr = to_room(col(m, 3))
-        f = dir_room(col(m, 2))
-        objects.append({
-            'category': next(iter(o['category'])),
-            'center': [round(v, 3) for v in ctr],
-            'size': [round(v, 3) for v in o['dimensions']],
-            'rotY': round(math.atan2(f[0], f[2]), 4),
-            'front': [round(f[0], 3), round(f[2], 3)],
-        })
-
-    # --- photos (upright framing: image up = sensor -x, right = sensor +y) -----------
-    photos = []
+    with open(src) as f:
+        room = json.load(f)
     pj = os.path.join(a.bundle, 'photos/photos.json')
-    for p in (json.load(open(pj)) if os.path.exists(pj) else []):
-        if a.room is not None and p['room'] != a.room:
-            continue
-        pm = mat(p['transform'])
-        pos = to_room(col(pm, 3))
-        fwd = dir_room([-v for v in col(pm, 2)])
-        up = dir_room([-v for v in col(pm, 0)])
-        fx = p['intrinsics'][0]
-        # upright image is height=sensor width; vertical fov spans the sensor's x axis
-        fovY = math.degrees(2 * math.atan(p['width'] / 2 / fx))
-        photos.append({
-            'file': p['file'], 'position': [round(v, 4) for v in pos], 'forward': [round(v, 5) for v in fwd],
-            'up': [round(v, 5) for v in up], 'fovY': round(fovY, 3), 'aspect': round(p['height'] / p['width'], 5),
-            'blurPixels': p.get('blurPixels'),
-        })
+    photos = []
+    if os.path.exists(pj):
+        with open(pj) as f:
+            photos = json.load(f)
 
-    result = {
-        'source': os.path.basename(os.path.normpath(a.bundle)) + ('' if a.room is None else f' room {a.room}'),
-        'transform': {'theta': theta, 'center': [cx, cz], 'floorY': floorY,
-                      'worldToRoom': [W2R[r][c] for c in range(4) for r in range(4)]},
-        'polygon': poly, 'walls': out_walls, 'objects': objects, 'photos': photos,
-    }
+    result = convert_room(room, room_photos(photos, a.room), source_name(a.bundle, a.room), a.turn)
     out = a.o or os.path.join(a.bundle, 'room.json')
-    json.dump(result, open(out, 'w'), indent=1)
-
-    xs = [p for w in out_walls for p in (w['a'][0], w['b'][0])]
-    zs = [p for w in out_walls for p in (w['a'][1], w['b'][1])]
-    print(f'room {max(xs) - min(xs):.2f} × {max(zs) - min(zs):.2f} m, heights {sorted({w["height"] for w in out_walls})}, '
-          f'{len(out_walls)} walls, {len(objects)} objects, {len(photos)} photos → {out}')
-    for w in out_walls:
-        ops = ', '.join(f"{o['kind']} u{o['u0']:.2f}-{o['u1']:.2f} v{o['v0']:.2f}-{o['v1']:.2f}" for o in w['openings'])
-        print(f"  wall {w['index']:2d}: ({w['a'][0]:6.2f},{w['a'][1]:6.2f}) → ({w['b'][0]:6.2f},{w['b'][1]:6.2f})  "
-              f"len {w['length']:.2f} h {w['height']:.2f}  n ({w['n'][0]:.0f},{w['n'][2]:.0f})  {ops}")
-    for o in objects:
-        print(f"  {o['category']:12s} center ({o['center'][0]:.2f},{o['center'][2]:.2f}) size {o['size']} rotY {math.degrees(o['rotY']):.0f}°")
+    with open(out, 'w') as f:
+        json.dump(result, f, indent=1)
+    for line in summary(result, out):
+        print(line)
 
     if a.plan:
         plan(result, a.plan)
