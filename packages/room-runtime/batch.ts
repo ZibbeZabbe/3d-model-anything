@@ -86,6 +86,8 @@ export function batchStatic(root: THREE.Object3D, roots: THREE.Object3D[] = [], 
 
 const fingerprints = new WeakMap<THREE.Material, string>();
 const IGNORE = new Set(['uuid', 'id', 'name', 'userData', 'version', '_listeners', 'type', 'isMaterial']);
+/** Private fields that back a public accessor (alphaTest, clearcoat...): they still set the look. */
+const ACCESSOR_FIELDS = new Set(['_alphaTest', '_anisotropy', '_clearcoat', '_sheen', '_iridescence', '_transmission', '_dispersion', '_dashSize']);
 /**
  * Materials that are separate objects but identical (items often build per-mesh clones) merge
  * together: a fingerprint of every parameter, textures by image source + transform.
@@ -100,7 +102,7 @@ function fingerprint(mat: THREE.Material): string {
     const parts: string[] = [mat.type];
     const rec = mat as unknown as Record<string, unknown>;
     for (const k of Object.keys(rec).sort()) {
-      if (IGNORE.has(k) || k.startsWith('_') && k !== '_anisotropy' && k !== '_clearcoat' && k !== '_sheen' && k !== '_iridescence' && k !== '_transmission' && k !== '_dispersion' && k !== '_dashSize') continue;
+      if (IGNORE.has(k) || (k.startsWith('_') && !ACCESSOR_FIELDS.has(k))) continue;
       const v = rec[k];
       let s: string;
       if (v === null || v === undefined) s = '-';

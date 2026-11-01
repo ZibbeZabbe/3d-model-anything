@@ -409,6 +409,10 @@ describe('material matching', () => {
     expect(merges(paint(), Object.assign(paint(), { clippingPlanes: [new THREE.Plane()] }))).toBe(false);
   });
 
+  it('tells alpha test thresholds apart, since a cutout discards fragments', () => {
+    expect(merges(paint(), paint({ alphaTest: 0.5 }))).toBe(false);
+  });
+
   it('tells the material types apart', () => {
     expect(merges(new THREE.MeshLambertMaterial(), new THREE.MeshPhongMaterial())).toBe(false);
   });
