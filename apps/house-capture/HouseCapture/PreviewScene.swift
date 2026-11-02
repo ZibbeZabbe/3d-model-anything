@@ -342,10 +342,14 @@ final class PreviewScene: NSObject, UIGestureRecognizerDelegate {
   var totalVertices: Int { parts.reduce(0) { $0 + $1.asset.mesh.vertexCount } }
   var totalTriangles: Int { parts.reduce(0) { $0 + ($1.asset.inside.count + $1.asset.outside.count) / 3 } }
 
+  /// The heights the grid and the plan cut work from: the lowest floor and the highest ceiling of
+  /// the rooms given, or a standard storey when there are none.
+  nonisolated static func span(of rooms: [(floor: Float, ceiling: Float)]) -> (floor: Float, ceiling: Float) {
+    (rooms.map(\.floor).min() ?? 0, rooms.map(\.ceiling).max() ?? 2.5)
+  }
+
   private func refreshLevels() {
-    // the floor under most of the geometry: the lowest room floor, ceiling the highest
-    floorY = parts.map(\.asset.floorY).min() ?? 0
-    ceilingY = parts.map(\.asset.ceilingY).max() ?? 2.5
+    (floorY, ceilingY) = Self.span(of: parts.map { ($0.asset.floorY, $0.asset.ceilingY) })
     if let biggest = parts.max(by: { $0.asset.inside.count < $1.asset.inside.count }) { wallYaw = biggest.asset.wallYaw }
     gridNode.simdPosition = SIMD3(modelCenter.x, floorY - 0.004, modelCenter.z)
   }
