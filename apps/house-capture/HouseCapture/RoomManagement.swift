@@ -21,6 +21,12 @@ extension HouseProject {
       h.rooms[i].name = clean
     }
   }
+  @MainActor static func setRoomLevel(houseID: String, roomID: String, level: Level?) throws {
+    try modify(houseID) { h in
+      guard let i = h.rooms.firstIndex(where: { $0.id == roomID }) else { return }
+      h.rooms[i].level = level
+    }
+  }
   /// Soft deletion keeps data intact until the user explicitly deletes it permanently.
   @MainActor static func moveRoomToTrash(houseID: String, roomID: String) throws {
     let h = try load(id: houseID)

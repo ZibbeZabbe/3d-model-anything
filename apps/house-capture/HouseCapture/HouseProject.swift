@@ -68,6 +68,8 @@ struct HouseProject: Codable, Identifiable {
     var active: RoomRef?
     /// every scan of this room, oldest first (includes `active`)
     var history: [RoomRef] = []
+    /// the storey the user put this room on; nil until they choose one
+    var level: Level?
   }
 
   struct RoomRef: Codable, Equatable {
