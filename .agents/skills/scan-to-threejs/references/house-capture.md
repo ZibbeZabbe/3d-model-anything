@@ -17,8 +17,11 @@ The output directory must be new. The script never edits the source export. It:
 
 - Reads each room's `active` reference, rather than choosing the newest session or merging history.
 - Converts that session's `rooms/room-N.json` and matching photos into room-local coordinates.
-- Exports `room-NNN.json` and an `index.json` recording names, source bundles, active references,
-  ready/blocked status and placement matrices. Filenames are generated, not taken from room names.
+- Exports `room-NNN.json` and an `index.json` recording names, levels, source bundles, active
+  references, ready/blocked status and placement matrices. Filenames are generated, not taken from
+  room names. `level` is the storey the user put the room on in the app (0 ground floor, 1 the floor
+  above, -1 the first basement), or null when unset. It is a label: stack storeys with
+  `roomToHouse`, which already carries each room's measured height, never by level × a floor height.
 - Reports absent active scans, missing/mismatched references and unaligned sessions/zones. Exit code
   2 means a partial/blocked export; inspect the index. It does not compute ICP or manual alignment.
 

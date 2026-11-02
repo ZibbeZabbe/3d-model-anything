@@ -30,6 +30,8 @@ The Fieldwork house screen shows a numbered room library with previews rendered 
 
 Name the room, tap **Scan**, then move around it until coverage improves. **Finish room** saves it; **Finish session** ends the visit. Tracking groups and coordinate transforms remain in the export format for later house assembly, but are not concepts the user needs to manage. Separate captures still need alignment before they can form a connected house model.
 
+**Levels.** Give each room the storey it is on, from the room's **Level** row or the room's long-press menu in the house list (two basements up to a 5th floor). Once one room has a level, the house list groups rooms by level, lowest first, with unassigned rooms under **No level**. The 3D house preview's filter menu then offers **Levels**: showing one level fits the grid and the plan cut to that level's floor, so an upper floor can be seen in plan on its own. A level is a label the user sets, not a measurement: the rooms keep their measured heights in the house frame. Linking two storeys still needs one capture session that climbs the stairs, since **Connect room** matches doorways, not staircases.
+
 Swipe left on a room to move it and its history to **Recently Deleted**. Restore it there, or explicitly delete it permanently. Scan versions can be inspected, switched, compared and moved to Recently Deleted individually. Rename keeps a stable room ID; typing an identical name does not silently replace a different room. On permanent deletion, Sessions used only by that room are deleted; recordings shared with other rooms are retained. Room-specific layouts and meshes are removed from shared sessions. Empty tracking groups are removed automatically. Deletion invalidates affected tracking maps and merged previews to avoid reusing deleted geometry. Unrelated rooms and maps remain intact. Session deletion remains available under **Sessions**.
 
 Every finished room is written to house.json and the bundle right away and the map is re-saved
@@ -48,7 +50,7 @@ usable full-triangle photo keep their cached vertex colors.
 ```
 Documents/Diagnostics/<house> <session>.json  diagnostics of deleted or abandoned sessions (last 20)
 Documents/Houses/<house>/
-  house.json                         zones, sessions (+ alignment), rooms (active + history)
+  house.json                         zones, sessions (+ alignment), rooms (active + history, level)
   zones/<area>/worldmap.arworldmap   latest map of the area (NSKeyedArchiver, secure coding)
   zones/<area>/structure.json|usdz   RoomPlan merge of the area's active rooms (preview only)
   sessions/<yyyy-MM-dd HH.mm.ss>/    one session = one scan bundle, house-capture/5:
