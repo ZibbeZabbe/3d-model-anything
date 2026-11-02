@@ -87,10 +87,10 @@ extension HouseProject {
 
   var url: URL { Self.root.appendingPathComponent(id, isDirectory: true) }
 
-  static func create(name: String) throws -> HouseProject {
+  static func create(name: String, at date: Date = Date()) throws -> HouseProject {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-    var house = HouseProject(id: formatter.string(from: Date()), name: name, createdAt: Date())
+    var house = HouseProject(id: formatter.string(from: date), name: name, createdAt: date)
     for dir in ["zones", "sessions"] {
       try FileManager.default.createDirectory(at: house.url.appendingPathComponent(dir), withIntermediateDirectories: true)
     }
