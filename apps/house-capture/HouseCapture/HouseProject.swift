@@ -87,10 +87,24 @@ extension HouseProject {
 
   var url: URL { Self.root.appendingPathComponent(id, isDirectory: true) }
 
+  /// A new, empty house named after its creation time. A second house created in the same second
+  /// gets " 2", " 3"... appended, so it never takes over another house's folder.
   static func create(name: String, at date: Date = Date()) throws -> HouseProject {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-    var house = HouseProject(id: formatter.string(from: date), name: name, createdAt: date)
+    let fm = FileManager.default
+    try fm.createDirectory(at: root, withIntermediateDirectories: true)
+    let base = folderName(for: date)
+    var house = HouseProject(id: base, name: name, createdAt: date)
+    var copy = 1
+    while true {
+      do {
+        // Not intermediate: creating the folder fails when it exists, which claims it atomically.
+        try fm.createDirectory(at: house.url, withIntermediateDirectories: false)
+        break
+      } catch where fm.fileExists(atPath: house.url.path) {
+        copy += 1
+        house.id = "\(base) \(copy)"
+      }
+    }
     for dir in ["zones", "sessions"] {
       try FileManager.default.createDirectory(at: house.url.appendingPathComponent(dir), withIntermediateDirectories: true)
     }
