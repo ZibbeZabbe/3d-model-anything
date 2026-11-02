@@ -63,6 +63,10 @@ struct FieldworkRoomScreen: View {
               } icon: { Image(systemName: "clock").foregroundStyle(Fieldwork.secondary).frame(width: 28) }
             }.padding(.vertical, 4)
             FieldworkRule()
+            Menu {
+              LevelChoices(current: room.level) { level in perform { try HouseProject.setRoomLevel(houseID: houseID, roomID: roomID, level: level) } }
+            } label: { actionRow("Level", subtitle: room.level?.name ?? "Not set: choose the floor this room is on", icon: "square.stack.3d.up") }
+            FieldworkRule()
             NavigationLink {
               RoomConnection(house: house, source: room, onSave: reload)
             } label: { actionRow("Connect room", subtitle: "Match a doorway with another scan", icon: "link") }

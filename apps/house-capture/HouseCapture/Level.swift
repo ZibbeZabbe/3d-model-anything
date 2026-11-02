@@ -6,7 +6,14 @@ struct Level: Hashable, Comparable {
 
   init(_ number: Int) { self.number = number }
 
+  /// The storeys offered when choosing a room's level: two basements up to a 5th floor covers
+  /// houses; a taller building is outside what one phone capture is for.
+  static let choices = (-2...5).map(Level.init)
+
   static func < (a: Level, b: Level) -> Bool { a.number < b.number }
+
+  /// Each level in `levels` once, lowest first; rooms without a level are skipped.
+  static func distinct(_ levels: some Sequence<Level?>) -> [Level] { Set(levels.compactMap { $0 }).sorted() }
 
   var name: String {
     switch number {
@@ -46,7 +53,7 @@ extension HouseProject {
   }
 
   var roomsByLevel: [LevelGroup] {
-    let levels = Set(rooms.compactMap(\.level)).sorted()
+    let levels = Level.distinct(rooms.map(\.level))
     let placed = levels.map { level in LevelGroup(level: level, rooms: rooms.filter { $0.level == level }) }
     let unplaced = rooms.filter { $0.level == nil }
     return placed + (unplaced.isEmpty ? [] : [LevelGroup(level: nil, rooms: unplaced)])

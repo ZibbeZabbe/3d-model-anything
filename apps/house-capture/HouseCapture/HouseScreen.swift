@@ -119,17 +119,28 @@ struct HouseScreen: View {
               .foregroundStyle(Fieldwork.secondary)
           }.padding(.vertical, 40)
         }
-        ForEach(Array(house.rooms.enumerated()), id: \.element.id) { number, room in
-          NavigationLink {
-            FieldworkRoomScreen(houseID: house.id, roomID: room.id, generation: generation, onCapture: onCapture)
-          } label: {
-            roomRow(house, room, number: number + 1)
-          }.buttonStyle(.plain)
-          .contextMenu {
-            Button("Rename", systemImage: "pencil") { newRoomName = room.name; renaming = room }
-            Button("Delete room", systemImage: "trash", role: .destructive) { deletingRoom = room }
+        let groups = house.roomsByLevel
+        ForEach(groups, id: \.level) { group in
+          if groups.contains(where: { $0.level != nil }) {
+            Text(group.level?.name ?? "No level")
+              .font(.subheadline.weight(.semibold)).foregroundStyle(Fieldwork.secondary)
+              .padding(.top, 24).padding(.bottom, 4)
           }
-          FieldworkRule()
+          ForEach(group.rooms) { room in
+            NavigationLink {
+              FieldworkRoomScreen(houseID: house.id, roomID: room.id, generation: generation, onCapture: onCapture)
+            } label: {
+              roomRow(house, room, number: (house.rooms.firstIndex { $0.id == room.id } ?? 0) + 1)
+            }.buttonStyle(.plain)
+            .contextMenu {
+              Button("Rename", systemImage: "pencil") { newRoomName = room.name; renaming = room }
+              Menu("Level", systemImage: "square.stack.3d.up") {
+                LevelChoices(current: room.level) { level in perform { try HouseProject.setRoomLevel(houseID: houseID, roomID: room.id, level: level) } }
+              }
+              Button("Delete room", systemImage: "trash", role: .destructive) { deletingRoom = room }
+            }
+            FieldworkRule()
+          }
         }
         if !house.sessions.isEmpty {
           DisclosureGroup {
