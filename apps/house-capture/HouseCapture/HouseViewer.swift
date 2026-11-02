@@ -145,9 +145,6 @@ final class PreviewModel: ObservableObject {
     assets = loaded
     for a in loaded { scene.add(a) }
     loadSeconds = CFAbsoluteTimeGetCurrent() - t0
-    let levels = (scene.floorY, scene.ceilingY)
-    cutRange = 0.2...max(1, levels.1 - levels.0 + 0.1)
-    cutHeight = min(1.4, cutRange.upperBound)
 
     var available: [RenderStyle] = loaded.isEmpty ? [] : [.photo, .coverage, .clay, .wireframe]
     if !loaded.isEmpty, sessions.count > 1 { available.insert(.sessions, at: 2) }
@@ -155,6 +152,7 @@ final class PreviewModel: ObservableObject {
     style = loaded.isEmpty ? .roomPlan : .photo
     scene.setStyle(style)
     scene.setVisibleRooms(visibleRooms, surroundings: showSurroundings)
+    refreshCut(height: 1.4)
     updateStats()
     if !loaded.isEmpty {
       scene.resetView(animated: false)
@@ -333,6 +331,13 @@ final class PreviewModel: ObservableObject {
     applyFilter(id.map { [$0] } ?? Set(rooms.map(\.id)))
   }
 
+  /// The levels the rooms are on, lowest first.
+  var levels: [Level] { Level.distinct(rooms.map(\.level)) }
+
+  func showLevel(_ level: Level) {
+    applyFilter(Set(rooms.filter { $0.level == level }.map(\.id)))
+  }
+
   func setSessionVisible(_ index: Int, _ visible: Bool) {
     var v = visibleRooms
     for r in rooms where r.session == index {
@@ -349,9 +354,16 @@ final class PreviewModel: ObservableObject {
     scene.setVisibleRooms(visibleRooms, surroundings: on)
   }
 
+  /// Fits the plan cut to the floor and ceiling of the rooms shown, keeping `height` when it fits.
+  private func refreshCut(height: Float) {
+    cutRange = 0.2...max(1, scene.ceilingY - scene.floorY + 0.1)
+    cutHeight = min(height, cutRange.upperBound)
+  }
+
   private func applyFilter(_ v: Set<String>) {
     visibleRooms = v
     scene.setVisibleRooms(v, surroundings: showSurroundings)
+    refreshCut(height: cutHeight)
     refreshPhotoList()
     if walkthrough { scene.setPhotos(photos) ; loadMarkerThumbnails() }
     scene.resetView(animated: true)
@@ -655,6 +667,13 @@ struct PreviewScreen: View {
           }
           Menu("Show only…") {
             ForEach(model.rooms) { room in Button(room.name) { model.showOnly(room.id) } }
+          }
+        }
+      }
+      if !model.levels.isEmpty {
+        Section("Levels") {
+          ForEach(model.levels.reversed(), id: \.self) { level in
+            Button(level.name) { model.showLevel(level) }
           }
         }
       }

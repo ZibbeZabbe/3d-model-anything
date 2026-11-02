@@ -44,6 +44,8 @@ struct PreviewRoom: Identifiable, Hashable {
   let name: String
   let mesh: URL
   let usdz: URL?
+  /// the storey the user put this room on, when the preview comes from a house
+  var level: Level? = nil
   var id: String { "\(session)/\(index)" }
 }
 
@@ -93,7 +95,7 @@ struct PreviewSource {
     if !active.isEmpty {
       for (room, ref) in active {
         guard let s = sessions.first(where: { $0.id == ref.session }) else { continue }
-        rooms.append(roomEntry(s, index: ref.index, name: room.name))
+        rooms.append(roomEntry(s, index: ref.index, name: room.name, level: room.level))
       }
     }
     rooms.sort { ($0.session, $0.index) < ($1.session, $1.index) }
@@ -118,11 +120,11 @@ struct PreviewSource {
                          sessions: [s], rooms: rooms)
   }
 
-  private static func roomEntry(_ s: PreviewSession, index: Int, name: String) -> PreviewRoom {
+  private static func roomEntry(_ s: PreviewSession, index: Int, name: String, level: Level? = nil) -> PreviewRoom {
     let usdz = s.folder.appendingPathComponent("rooms/room-\(index).usdz")
     return PreviewRoom(session: s.index, index: index, name: name,
                        mesh: s.folder.appendingPathComponent("mesh/room-\(index).ply"),
-                       usdz: FileManager.default.fileExists(atPath: usdz.path) ? usdz : nil)
+                       usdz: FileManager.default.fileExists(atPath: usdz.path) ? usdz : nil, level: level)
   }
 
   private static func roomsInBundle(_ s: PreviewSession) -> [PreviewRoom] {

@@ -349,7 +349,9 @@ final class PreviewScene: NSObject, UIGestureRecognizerDelegate {
   }
 
   private func refreshLevels() {
-    (floorY, ceilingY) = Self.span(of: parts.map { ($0.asset.floorY, $0.asset.ceilingY) })
+    // Only the rooms shown: an upper level on its own gets its own floor for the grid and plan cut.
+    let shown = parts.filter { visibleRooms.contains($0.asset.room.id) }
+    (floorY, ceilingY) = Self.span(of: shown.map { ($0.asset.floorY, $0.asset.ceilingY) })
     if let biggest = parts.max(by: { $0.asset.inside.count < $1.asset.inside.count }) { wallYaw = biggest.asset.wallYaw }
     gridNode.simdPosition = SIMD3(modelCenter.x, floorY - 0.004, modelCenter.z)
   }
@@ -393,6 +395,7 @@ final class PreviewScene: NSObject, UIGestureRecognizerDelegate {
     showSurroundings = surroundings
     for p in parts { apply(p) }
     for (id, n) in roomPlanNodes { n.isHidden = !ids.contains(id) }
+    refreshLevels()
   }
 
   func setClip(_ y: Float?) {
