@@ -63,9 +63,7 @@ struct FieldworkRoomScreen: View {
               } icon: { Image(systemName: "clock").foregroundStyle(Fieldwork.secondary).frame(width: 28) }
             }.padding(.vertical, 4)
             FieldworkRule()
-            Menu {
-              LevelChoices(current: room.level) { level in perform { try HouseProject.setRoomLevel(houseID: houseID, roomID: roomID, level: level) } }
-            } label: { actionRow("Level", subtitle: room.level?.name ?? "Not set: choose the floor this room is on", icon: "square.stack.3d.up") }
+            levelRow(room)
             FieldworkRule()
             NavigationLink {
               RoomConnection(house: house, source: room, onSave: reload)
@@ -77,6 +75,8 @@ struct FieldworkRoomScreen: View {
             ContentUnavailableView("No active scan", systemImage: "cube.transparent", description: Text("Scan this room to create its first preview."))
             Button("Scan this room") { onCapture(house.id, room.zone, nil, room.id) }
               .buttonStyle(FieldworkButtonStyle()).disabled(!CaptureController.isSupported)
+            FieldworkRule()
+            levelRow(room)
           }
         }.padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 32)
       } else { ProgressView().padding(40) }
@@ -120,6 +120,12 @@ struct FieldworkRoomScreen: View {
       Text(value).font(.title2.bold()).monospacedDigit()
       Text(label).font(.system(.caption, design: .monospaced)).foregroundStyle(Fieldwork.secondary)
     }
+  }
+  /// The level is the user's to set, with or without a scan.
+  private func levelRow(_ room: HouseProject.Room) -> some View {
+    Menu {
+      LevelChoices(current: room.level) { level in perform { try HouseProject.setRoomLevel(houseID: houseID, roomID: roomID, level: level) } }
+    } label: { actionRow("Level", subtitle: room.level?.name ?? "Not set: choose the floor this room is on", icon: "square.stack.3d.up") }
   }
   private func actionRow(_ title: String, subtitle: String, icon: String) -> some View {
     HStack(spacing: 12) {
