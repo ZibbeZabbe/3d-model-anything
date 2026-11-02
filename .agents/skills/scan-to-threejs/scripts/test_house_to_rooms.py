@@ -249,6 +249,15 @@ class ExportTests(HouseFixture):
         self.assertEqual({k: entry[k] for k in ['id', 'name', 'zone', 'active']},
                          {'id': 'office', 'name': 'Office', 'zone': 'z1', 'active': {'session': 's1', 'index': 1}})
 
+    def test_entry_carries_the_level_the_room_was_put_on(self):
+        self.office()['level'] = 1
+        entry = self.export()['rooms'][0]
+        self.assertEqual(entry['level'], 1)
+
+    def test_a_room_without_a_level_says_so(self):
+        entry = self.export()['rooms'][0]
+        self.assertIsNone(entry['level'])
+
     # --- blocked rooms -----------------------------------------------------------
 
     def test_room_without_active_scan_is_blocked(self):

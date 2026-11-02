@@ -83,7 +83,7 @@ def export_house(root, out, room_id=None):
     with tempfile.TemporaryDirectory(prefix='.house-import-', dir=out.parent) as temp:
         stage = Path(temp)
         for number, room in enumerate(rooms):
-            entry = {'id': room['id'], 'name': room['name'], 'zone': room['zone'],
+            entry = {'id': room['id'], 'name': room['name'], 'zone': room['zone'], 'level': room.get('level'),
                      'active': room.get('active'), 'status': 'blocked'}
             index['rooms'].append(entry)
             active = room.get('active')
